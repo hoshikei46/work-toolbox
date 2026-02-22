@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta name="robots" content="noindex, nofollow">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SmartStocker</title>
@@ -32,58 +31,52 @@
         const db = firebase.firestore();
         const { useState, useEffect, useMemo } = React;
 
+        const defaultCategories = ['文具・事務用品', '印刷・OA消耗品', '郵送・行事用品', '日用・衛生・清掃', 'その他・PC周辺'];
+
         function App() {
             const [groupId, setGroupId] = useState(localStorage.getItem('smartstocker_group') || '');
             const [isLoggedIn, setIsLoggedIn] = useState(!!groupId);
             const [items, setItems] = useState([]);
+            
+            const [categories, setCategories] = useState(defaultCategories);
             const [units, setUnits] = useState(['個', '箱', 'セット', '本']);
             const [errorMsg, setErrorMsg] = useState('');
-
-            const [newItemName, setNewItemName] = useState('');
-            const [newCategory, setNewCategory] = useState('文房具');
-            const [newItemUnit, setNewItemUnit] = useState('個');
-            const [newMinStock, setNewMinStock] = useState(3);
             const [showAlertsOnly, setShowAlertsOnly] = useState(false);
 
+            // 設定用モーダル
             const [showUnitModal, setShowUnitModal] = useState(false);
+            const [showCategoryModal, setShowCategoryModal] = useState(false);
             const [newUnitInput, setNewUnitInput] = useState('');
+            const [newCategoryInput, setNewCategoryInput] = useState('');
 
-            // 編集モード管理用の状態
-            const [editingItem, setEditingItem] = useState(null);
+            // ★ 物品の「登録/編集」統合モーダルの状態
+            const [itemModal, setItemModal] = useState({ isOpen: false, mode: 'add', itemId: null });
+            const [formData, setFormData] = useState({
+                name: '', category: defaultCategories[0], unit: '個', minStock: 3, vendor: '', orderCode: ''
+            });
 
             useEffect(() => {
                 if (!isLoggedIn) return;
                 
-                const unsubItems = db.collection(`groups/${groupId}/items`)
-                    .onSnapshot((snapshot) => {
-                        const itemsData = snapshot.docs.map(doc => ({
-                            id: doc.id,
-                            ...doc.data()
-                        }));
-                        setItems(itemsData);
-                        setErrorMsg('');
-                    }, (err) => {
-                        console.error("データ取得エラー:", err);
-                        setErrorMsg("データベースへのアクセス権限がありません。");
-                    });
+                const unsubItems = db.collection(`groups/${groupId}/items`).onSnapshot((snapshot) => {
+                    const itemsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    setItems(itemsData);
+                    setErrorMsg('');
+                }, (err) => setErrorMsg("データ取得エラー: アクセス権限がありません。"));
 
-                const unsubUnits = db.collection(`groups/${groupId}/settings`).doc('units')
-                    .onSnapshot((docSnap) => {
-                        if (docSnap.exists) {
-                            const data = docSnap.data().list || ['個', '箱', 'セット', '本'];
-                            setUnits(data);
-                            if (!data.includes(newItemUnit)) setNewItemUnit(data[0] || '個');
-                        } else {
-                            db.collection(`groups/${groupId}/settings`).doc('units').set({ list: ['個', '箱', 'セット', '本'] });
-                        }
-                    });
+                const unsubUnits = db.collection(`groups/${groupId}/settings`).doc('units').onSnapshot((docSnap) => {
+                    if (docSnap.exists) setUnits(docSnap.data().list || ['個', '箱', 'セット', '本']);
+                });
 
-                return () => { unsubItems(); unsubUnits(); };
+                const unsubCategories = db.collection(`groups/${groupId}/settings`).doc('categories').onSnapshot((docSnap) => {
+                    if (docSnap.exists) setCategories(docSnap.data().list || defaultCategories);
+                });
+
+                return () => { unsubItems(); unsubUnits(); unsubCategories(); };
             }, [isLoggedIn, groupId]);
 
             const displayedItems = useMemo(() => {
-                let filtered = items;
-                if (showAlertsOnly) filtered = items.filter(item => item.currentStock <= item.minStock);
+                let filtered = showAlertsOnly ? items.filter(item => item.currentStock <= item.minStock) : items;
                 return filtered.sort((a, b) => {
                     if (a.category !== b.category) return (a.category || '').localeCompare(b.category || '', 'ja');
                     return (a.name || '').localeCompare(b.name || '', 'ja');
@@ -97,78 +90,67 @@
                     setGroupId(id);
                     localStorage.setItem('smartstocker_group', id);
                     setIsLoggedIn(true);
-                    setErrorMsg('');
                 }
             };
 
             const updateStock = (id, current, change) => {
                 const newStock = Math.max(0, current + change);
                 db.collection(`groups/${groupId}/items`).doc(id).update({
-                    currentStock: newStock,
-                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                }).catch(err => setErrorMsg("更新に失敗しました: " + err.message));
+                    currentStock: newStock, updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
             };
 
-            const addItem = (e) => {
+            // ★ モーダルを開く処理（追加用・編集用）
+            const openAddModal = () => {
+                setFormData({ name: '', category: categories[0] || defaultCategories[0], unit: units[0] || '個', minStock: 3, vendor: '', orderCode: '' });
+                setItemModal({ isOpen: true, mode: 'add', itemId: null });
+            };
+
+            const openEditModal = (item) => {
+                setFormData({
+                    name: item.name, category: item.category || categories[0], unit: item.unit || '個', minStock: item.minStock,
+                    vendor: item.vendor || '', orderCode: item.orderCode || ''
+                });
+                setItemModal({ isOpen: true, mode: 'edit', itemId: item.id });
+            };
+
+            // ★ フォーム送信処理（追加・更新を自動判定）
+            const handleFormSubmit = (e) => {
                 e.preventDefault();
-                if (!newItemName || !newCategory || !newItemUnit) return;
-                
-                db.collection(`groups/${groupId}/items`).add({
-                    name: newItemName,
-                    category: newCategory,
-                    unit: newItemUnit,
-                    currentStock: 0, 
-                    minStock: Number(newMinStock), 
-                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                }).then(() => {
-                    setNewItemName('');
-                }).catch(err => setErrorMsg("追加に失敗しました: " + err.message));
+                if (!formData.name || !formData.category || !formData.unit) return;
+
+                const payload = {
+                    name: formData.name,
+                    category: formData.category,
+                    unit: formData.unit,
+                    minStock: Number(formData.minStock),
+                    vendor: formData.vendor,
+                    orderCode: formData.orderCode,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                };
+
+                if (itemModal.mode === 'add') {
+                    payload.currentStock = 0;
+                    payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+                    db.collection(`groups/${groupId}/items`).add(payload).then(() => setItemModal({ ...itemModal, isOpen: false }));
+                } else {
+                    db.collection(`groups/${groupId}/items`).doc(itemModal.itemId).update(payload).then(() => setItemModal({ ...itemModal, isOpen: false }));
+                }
             };
 
             const addUnit = () => {
                 const trimmed = newUnitInput.trim();
-                if(!trimmed) return;
-                const updatedUnits = [...new Set([...units, trimmed])];
-                db.collection(`groups/${groupId}/settings`).doc('units').update({ list: updatedUnits });
-                setNewUnitInput('');
+                if(trimmed) db.collection(`groups/${groupId}/settings`).doc('units').update({ list: [...new Set([...units, trimmed])] }).then(() => setNewUnitInput(''));
             };
-
-            const removeUnit = (unitToRemove) => {
-                if(window.confirm(`「${unitToRemove}」を削除してもよろしいですか？\n※すでに登録されている物品の単位は変更されません。`)) {
-                    const updatedUnits = units.filter(u => u !== unitToRemove);
-                    db.collection(`groups/${groupId}/settings`).doc('units').update({ list: updatedUnits });
-                }
+            const removeUnit = (u) => {
+                if(window.confirm(`「${u}」を削除しますか？`)) db.collection(`groups/${groupId}/settings`).doc('units').update({ list: units.filter(x => x !== u) });
             };
-
-            const startEditing = (item) => {
-                setEditingItem({
-                    id: item.id,
-                    name: item.name,
-                    category: item.category || '文房具',
-                    minStock: item.minStock,
-                    unit: item.unit || '個'
-                });
+            const addCategory = () => {
+                const trimmed = newCategoryInput.trim();
+                if(trimmed) db.collection(`groups/${groupId}/settings`).doc('categories').update({ list: [...new Set([...categories, trimmed])] }).then(() => setNewCategoryInput(''));
             };
-
-            const saveEdit = (e) => {
-                e.preventDefault();
-                if (!editingItem) return;
-
-                db.collection(`groups/${groupId}/items`).doc(editingItem.id).update({
-                    name: editingItem.name,
-                    category: editingItem.category,
-                    minStock: Number(editingItem.minStock),
-                    unit: editingItem.unit,
-                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                }).then(() => {
-                    setEditingItem(null); 
-                }).catch(err => setErrorMsg("更新に失敗しました: " + err.message));
-            };
-
-            const handleLogout = () => {
-                localStorage.removeItem('smartstocker_group');
-                setIsLoggedIn(false);
-                setGroupId('');
+            const removeCategory = (c) => {
+                if(window.confirm(`「${c}」を削除しますか？`)) db.collection(`groups/${groupId}/settings`).doc('categories').update({ list: categories.filter(x => x !== c) });
             };
 
             if (!isLoggedIn) {
@@ -178,8 +160,8 @@
                             <h1 className="text-3xl font-black text-indigo-600 mb-2 tracking-tight">SmartStocker</h1>
                             <p className="text-slate-500 mb-6 font-medium">職場IDを入力して開始してください</p>
                             <form onSubmit={handleLogin} className="space-y-4">
-                                <input name="groupInput" type="text" placeholder="例: office-01" className="w-full p-4 border-2 border-slate-200 rounded-xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 outline-none transition font-bold text-slate-700" required />
-                                <button type="submit" className="w-full bg-indigo-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-indigo-700 active:scale-95 transition shadow-lg shadow-indigo-200">入室する</button>
+                                <input name="groupInput" type="text" placeholder="例: office-01" className="w-full p-4 border-2 border-slate-200 rounded-xl focus:border-indigo-500 font-bold" required />
+                                <button type="submit" className="w-full bg-indigo-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-indigo-700">入室する</button>
                             </form>
                         </div>
                     </div>
@@ -189,45 +171,22 @@
             const alertCount = items.filter(item => item.currentStock <= item.minStock).length;
 
             return (
-                <div className="max-w-5xl mx-auto p-4 md:p-8 pb-20">
+                <div className="max-w-5xl mx-auto p-4 md:p-8 pb-32">
                     <header className="flex justify-between items-center mb-6 bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
                         <div>
                             <h1 className="text-2xl font-black text-slate-800 tracking-tight">SmartStocker</h1>
                             <p className="text-sm font-bold text-indigo-500">接続先ID: {groupId}</p>
                         </div>
-                        <button onClick={handleLogout} className="text-sm font-bold text-slate-400 hover:text-red-500 transition px-4 py-2 rounded-lg hover:bg-red-50">退出する</button>
+                        <div className="flex gap-2">
+                            {/* ★ PC用の上部「追加」ボタン */}
+                            <button onClick={openAddModal} className="hidden sm:block bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-indigo-700 transition shadow-sm">+ 新規登録</button>
+                            <button onClick={() => {localStorage.removeItem('smartstocker_group'); setIsLoggedIn(false);}} className="text-sm font-bold text-slate-400 hover:text-red-500 px-4 py-2 rounded-lg hover:bg-red-50">退出</button>
+                        </div>
                     </header>
 
-                    {errorMsg && (
-                        <div className="bg-red-50 border-2 border-red-200 text-red-700 p-4 rounded-xl mb-6 font-bold shadow-sm" role="alert">
-                            <p>{errorMsg}</p>
-                        </div>
-                    )}
+                    {errorMsg && <div className="bg-red-50 border-2 border-red-200 text-red-700 p-4 rounded-xl mb-6 font-bold">{errorMsg}</div>}
 
-                    <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 mb-6 relative z-10">
-                        <h2 className="text-sm font-bold text-slate-400 mb-4 uppercase tracking-wider">新しい物品を登録</h2>
-                        <form onSubmit={addItem} className="flex flex-col md:flex-row gap-3">
-                            <div className="flex-1">
-                                <input value={newItemName} onChange={(e) => setNewItemName(e.target.value)} placeholder="物品名 (例: A4コピー用紙)" className="w-full p-3 border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 transition font-bold text-slate-700" required />
-                            </div>
-                            <div className="w-full md:w-40">
-                                <input list="categories" value={newCategory} onChange={(e) => setNewCategory(e.target.value)} placeholder="分野" className="w-full p-3 border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 transition font-bold text-slate-700" required />
-                                <datalist id="categories"><option value="文房具" /><option value="消耗品" /><option value="PC周辺機器" /><option value="飲料" /></datalist>
-                            </div>
-                            <div className="w-full md:w-36 flex gap-1">
-                                <select value={newItemUnit} onChange={(e) => setNewItemUnit(e.target.value)} className="w-full p-3 border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 transition font-bold text-slate-700 bg-white" required>
-                                    {units.map(u => <option key={u} value={u}>{u}</option>)}
-                                </select>
-                                <button type="button" onClick={() => setShowUnitModal(true)} className="p-3 bg-slate-100 text-slate-500 rounded-xl hover:bg-slate-200 font-bold transition flex-shrink-0" title="単位を編集する">⚙️</button>
-                            </div>
-                            <div className="w-full md:w-36 flex items-center bg-slate-50 border-2 border-slate-200 rounded-xl px-3 focus-within:border-indigo-500 transition">
-                                <span className="text-xs font-bold text-slate-400 mr-2 whitespace-nowrap">アラート:</span>
-                                <input type="number" min="0" value={newMinStock} onChange={(e) => setNewMinStock(e.target.value)} className="w-full bg-transparent p-2 outline-none font-bold text-slate-700" required />
-                            </div>
-                            <button type="submit" className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-indigo-700 active:scale-95 transition shadow-md shadow-indigo-100 whitespace-nowrap">追加</button>
-                        </form>
-                    </div>
-
+                    {/* フィルタータブ */}
                     <div className="flex gap-2 mb-4 bg-slate-200 p-1 rounded-xl w-full sm:w-auto overflow-x-auto">
                         <button onClick={() => setShowAlertsOnly(false)} className={`flex-1 sm:flex-none px-6 py-2 rounded-lg font-bold text-sm transition ${!showAlertsOnly ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:bg-slate-300'}`}>
                             すべて表示 ({items.length})
@@ -237,100 +196,163 @@
                         </button>
                     </div>
 
-                    <div className="flex flex-col gap-3 relative z-0">
-                        {displayedItems.length === 0 && !errorMsg && (
+                    {/* 一覧表示（非常にスッキリしました） */}
+                    <div className="flex flex-col gap-3">
+                        {displayedItems.length === 0 && (
                             <p className="text-slate-500 font-bold text-center py-12 bg-white rounded-2xl border border-dashed border-slate-300">
-                                {showAlertsOnly ? "現在、発注が必要な物品はありません！🎉" : "まだ物品が登録されていません。上のフォームから追加してください。"}
+                                {showAlertsOnly ? "現在、発注が必要な物品はありません！🎉" : "右下の「＋」ボタンから物品を登録してください。"}
                             </p>
                         )}
-                        {displayedItems.map(item => {
-                            const isEditing = editingItem && editingItem.id === item.id;
-                            
-                            if (isEditing) {
-                                return (
-                                    <form key={item.id} onSubmit={saveEdit} className="bg-white p-5 rounded-2xl border-2 border-indigo-400 shadow-md transform scale-[1.02] transition-all z-20">
-                                        <div className="flex justify-between items-center mb-3">
-                                            <span className="text-sm font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-lg">✏️ 情報を編集中...</span>
-                                            <div className="flex gap-2">
-                                                <button type="button" onClick={() => setEditingItem(null)} className="px-4 py-2 text-sm font-bold text-slate-500 hover:bg-slate-100 rounded-lg transition">キャンセル</button>
-                                                <button type="submit" className="px-4 py-2 text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg shadow-sm transition">保存する</button>
-                                            </div>
-                                        </div>
-                                        
-                                        <div className="flex flex-col md:flex-row gap-3">
-                                            <div className="flex-1">
-                                                <label className="text-xs font-bold text-slate-400 block mb-1">物品名</label>
-                                                <input value={editingItem.name} onChange={(e) => setEditingItem({...editingItem, name: e.target.value})} className="w-full p-2 border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 font-bold text-slate-700" required />
-                                            </div>
-                                            <div className="w-full md:w-32">
-                                                <label className="text-xs font-bold text-slate-400 block mb-1">分野</label>
-                                                <input list="categories" value={editingItem.category} onChange={(e) => setEditingItem({...editingItem, category: e.target.value})} className="w-full p-2 border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 font-bold text-slate-700" required />
-                                            </div>
-                                            <div className="w-full md:w-32">
-                                                <label className="text-xs font-bold text-slate-400 block mb-1">単位</label>
-                                                <select value={editingItem.unit} onChange={(e) => setEditingItem({...editingItem, unit: e.target.value})} className="w-full p-2 border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 font-bold text-slate-700 bg-white" required>
-                                                    {units.map(u => <option key={u} value={u}>{u}</option>)}
-                                                </select>
-                                            </div>
-                                            <div className="w-full md:w-32">
-                                                <label className="text-xs font-bold text-slate-400 block mb-1">アラート数</label>
-                                                <input type="number" min="0" value={editingItem.minStock} onChange={(e) => setEditingItem({...editingItem, minStock: e.target.value})} className="w-full p-2 border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 font-bold text-slate-700" required />
-                                            </div>
-                                        </div>
-                                    </form>
-                                );
-                            }
-
-                            return (
-                                <div key={item.id} className={`flex flex-col sm:flex-row items-center justify-between p-4 rounded-2xl border-2 transition-all ${item.currentStock <= item.minStock ? 'bg-red-50 border-red-200' : 'bg-white border-slate-100 hover:border-indigo-100'}`}>
-                                    <div className="flex-1 w-full sm:w-auto mb-4 sm:mb-0">
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <span className="inline-block text-xs font-bold bg-slate-100 text-slate-600 px-2 py-1 rounded-md">{item.category}</span>
-                                            {item.currentStock <= item.minStock && <span className="text-xs font-black text-red-600 animate-pulse bg-red-100 px-2 py-1 rounded-md">要発注</span>}
-                                        </div>
-                                        <div className="flex items-center gap-3 mb-2">
-                                            <h3 className="font-black text-xl text-slate-800 leading-tight">{item.name}</h3>
-                                            <button onClick={() => startEditing(item)} className="text-xs font-bold text-slate-400 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 px-2 py-1 rounded transition border border-slate-200 hover:border-indigo-200">
-                                                ✏️ 編集
-                                            </button>
-                                        </div>
-                                        <div className="flex items-center text-xs font-bold text-slate-400">
-                                            アラート基準: <span className="text-slate-600 ml-1">{item.minStock} {item.unit || '個'}以下</span>
-                                        </div>
+                        {displayedItems.map(item => (
+                            <div key={item.id} className={`flex flex-col sm:flex-row items-center justify-between p-4 rounded-2xl border-2 transition-all ${item.currentStock <= item.minStock ? 'bg-red-50 border-red-200' : 'bg-white border-slate-100 hover:border-indigo-100'}`}>
+                                <div className="flex-1 w-full sm:w-auto mb-4 sm:mb-0">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="inline-block text-xs font-bold bg-slate-100 text-slate-600 px-2 py-1 rounded-md">{item.category}</span>
+                                        {item.currentStock <= item.minStock && <span className="text-xs font-black text-red-600 animate-pulse bg-red-100 px-2 py-1 rounded-md">要発注</span>}
                                     </div>
-                                    
-                                    <div className="flex items-center justify-between w-full sm:w-auto gap-6 sm:pl-4 sm:border-l-2 border-slate-100">
-                                        <div className="text-4xl font-black text-slate-700 tracking-tighter text-right min-w-[3rem]">
-                                            {item.currentStock} <span className="text-sm font-bold text-slate-400 tracking-normal inline-block align-middle mb-2">{item.unit || '個'}</span>
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <h3 className="font-black text-xl text-slate-800 leading-tight">{item.name}</h3>
+                                        <button onClick={() => openEditModal(item)} className="text-xs font-bold text-slate-400 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 px-2 py-1 rounded transition border border-slate-200">
+                                            ✏️ 編集
+                                        </button>
+                                    </div>
+                                    <div className="flex items-center text-xs font-bold text-slate-400 mb-1">
+                                        アラート基準: <span className="text-slate-600 ml-1">{item.minStock} {item.unit}以下</span>
+                                    </div>
+                                    {/* ★ 業者名・注文番号のコンパクト表示 */}
+                                    {(item.vendor || item.orderCode) && (
+                                        <div className="text-xs font-bold text-slate-500 bg-slate-100/50 p-2 rounded-lg inline-block">
+                                            {item.vendor && <span className="mr-3">🏢 {item.vendor}</span>}
+                                            {item.orderCode && <span>🏷️ {item.orderCode}</span>}
                                         </div>
-                                        <div className="flex gap-2">
-                                            <button onClick={() => updateStock(item.id, item.currentStock, -1)} className="w-12 h-12 flex items-center justify-center bg-white border-2 border-slate-200 rounded-xl hover:bg-slate-50 active:scale-95 transition text-2xl font-bold text-slate-600 shadow-sm">-</button>
-                                            <button onClick={() => updateStock(item.id, item.currentStock, 1)} className="w-12 h-12 flex items-center justify-center bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 active:scale-95 transition shadow-md shadow-indigo-200 text-2xl font-bold">+</button>
-                                        </div>
+                                    )}
+                                </div>
+                                
+                                <div className="flex items-center justify-between w-full sm:w-auto gap-6 sm:pl-4 sm:border-l-2 border-slate-100">
+                                    <div className="text-4xl font-black text-slate-700 tracking-tighter text-right min-w-[3rem]">
+                                        {item.currentStock} <span className="text-sm font-bold text-slate-400 tracking-normal inline-block align-middle mb-2">{item.unit}</span>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => updateStock(item.id, item.currentStock, -1)} className="w-12 h-12 flex items-center justify-center bg-white border-2 border-slate-200 rounded-xl hover:bg-slate-50 active:scale-95 transition text-2xl font-bold text-slate-600 shadow-sm">-</button>
+                                        <button onClick={() => updateStock(item.id, item.currentStock, 1)} className="w-12 h-12 flex items-center justify-center bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 active:scale-95 transition shadow-md shadow-indigo-200 text-2xl font-bold">+</button>
                                     </div>
                                 </div>
-                            );
-                        })}
+                            </div>
+                        ))}
                     </div>
 
-                    {/* 単位管理モーダル */}
+                    {/* ★ スマホ用フローティングアクションボタン (FAB) */}
+                    <button onClick={openAddModal} className="fixed bottom-6 right-6 w-16 h-16 bg-indigo-600 text-white rounded-full shadow-lg shadow-indigo-300 flex items-center justify-center text-3xl font-bold hover:bg-indigo-700 hover:scale-105 active:scale-95 transition z-30">
+                        +
+                    </button>
+
+                    {/* =========================================
+                        ★ 物品 登録/編集 統合モーダル (z-40)
+                    ========================================= */}
+                    {itemModal.isOpen && (
+                        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-40 overflow-y-auto">
+                            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 my-8 relative">
+                                <h2 className="text-xl font-black text-slate-800 mb-6 border-b pb-4">
+                                    {itemModal.mode === 'add' ? '✨ 新しい物品を登録' : '✏️ 物品情報を編集'}
+                                </h2>
+                                
+                                <form onSubmit={handleFormSubmit} className="space-y-4">
+                                    {/* 必須項目エリア */}
+                                    <div className="space-y-4 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                                        <div>
+                                            <label className="text-xs font-bold text-slate-500 block mb-1">物品名 <span className="text-red-500">*</span></label>
+                                            <input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="例: 【コピー用紙】A4" className="w-full p-3 border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 font-bold" required />
+                                        </div>
+                                        <div className="flex flex-col sm:flex-row gap-4">
+                                            <div className="flex-1">
+                                                <label className="text-xs font-bold text-slate-500 block mb-1">分野 <span className="text-red-500">*</span></label>
+                                                <div className="flex gap-1">
+                                                    <select value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full p-3 border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 font-bold bg-white" required>
+                                                        {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                                                    </select>
+                                                    <button type="button" onClick={() => setShowCategoryModal(true)} className="p-3 bg-slate-200 text-slate-600 rounded-xl hover:bg-slate-300 font-bold">⚙️</button>
+                                                </div>
+                                            </div>
+                                            <div className="w-full sm:w-1/3">
+                                                <label className="text-xs font-bold text-slate-500 block mb-1">単位 <span className="text-red-500">*</span></label>
+                                                <div className="flex gap-1">
+                                                    <select value={formData.unit} onChange={e => setFormData({...formData, unit: e.target.value})} className="w-full p-3 border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 font-bold bg-white" required>
+                                                        {units.map(u => <option key={u} value={u}>{u}</option>)}
+                                                    </select>
+                                                    <button type="button" onClick={() => setShowUnitModal(true)} className="p-3 bg-slate-200 text-slate-600 rounded-xl hover:bg-slate-300 font-bold">⚙️</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-slate-500 block mb-1">アラート数 (これを下回ると要発注)</label>
+                                            <input type="number" min="0" value={formData.minStock} onChange={e => setFormData({...formData, minStock: e.target.value})} className="w-full p-3 border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 font-bold" required />
+                                        </div>
+                                    </div>
+
+                                    {/* ★ 追加情報（業者・注文番号）エリア */}
+                                    <div className="space-y-4 p-4 border-2 border-dashed border-slate-200 rounded-xl">
+                                        <h3 className="text-sm font-bold text-slate-400">発注情報 (任意)</h3>
+                                        <div>
+                                            <label className="text-xs font-bold text-slate-500 block mb-1">業者名</label>
+                                            <input value={formData.vendor} onChange={e => setFormData({...formData, vendor: e.target.value})} placeholder="例: アスクル、たのめーる" className="w-full p-3 border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 font-bold" />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-slate-500 block mb-1">注文番号 / 商品コード</label>
+                                            <input value={formData.orderCode} onChange={e => setFormData({...formData, orderCode: e.target.value})} placeholder="例: 123-4567" className="w-full p-3 border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 font-bold" />
+                                        </div>
+                                    </div>
+
+                                    <div className="flex gap-3 pt-4">
+                                        <button type="button" onClick={() => setItemModal({ isOpen: false, mode: 'add', itemId: null })} className="flex-1 p-4 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition">キャンセル</button>
+                                        <button type="submit" className="flex-1 p-4 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition shadow-md">
+                                            {itemModal.mode === 'add' ? '登録する' : '保存する'}
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 分野管理モーダル (z-50: 登録モーダルより上に表示) */}
+                    {showCategoryModal && (
+                        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50">
+                            <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+                                <h3 className="font-black text-lg text-slate-800 mb-4">分野のカスタマイズ</h3>
+                                <div className="flex gap-2 mb-4">
+                                    <input value={newCategoryInput} onChange={e => setNewCategoryInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addCategory()} placeholder="新しい分野" className="flex-1 p-2 border-2 border-slate-200 rounded-lg outline-none focus:border-indigo-500 font-bold" />
+                                    <button onClick={addCategory} className="bg-indigo-600 text-white px-4 rounded-lg font-bold">追加</button>
+                                </div>
+                                <ul className="space-y-2 max-h-60 overflow-y-auto mb-6 pr-2">
+                                    {categories.map(c => (
+                                        <li key={c} className="flex justify-between items-center bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                            <span className="font-bold text-slate-700">{c}</span>
+                                            <button onClick={() => removeCategory(c)} className="text-red-500 font-bold text-sm px-2">削除</button>
+                                        </li>
+                                    ))}
+                                </ul>
+                                <button onClick={() => setShowCategoryModal(false)} className="w-full p-3 bg-slate-200 text-slate-700 rounded-xl font-bold">閉じる</button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 単位管理モーダル (z-50) */}
                     {showUnitModal && (
-                        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                            <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 transform transition-all">
+                        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50">
+                            <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
                                 <h3 className="font-black text-lg text-slate-800 mb-4">単位のカスタマイズ</h3>
                                 <div className="flex gap-2 mb-4">
-                                    <input value={newUnitInput} onChange={(e) => setNewUnitInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addUnit()} placeholder="新しい単位 (例: 束, 袋)" className="flex-1 p-2 border-2 border-slate-200 rounded-lg outline-none focus:border-indigo-500 font-bold text-slate-700" />
-                                    <button onClick={addUnit} className="bg-indigo-600 text-white px-4 rounded-lg font-bold hover:bg-indigo-700 transition">追加</button>
+                                    <input value={newUnitInput} onChange={e => setNewUnitInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addUnit()} placeholder="新しい単位" className="flex-1 p-2 border-2 border-slate-200 rounded-lg outline-none focus:border-indigo-500 font-bold" />
+                                    <button onClick={addUnit} className="bg-indigo-600 text-white px-4 rounded-lg font-bold">追加</button>
                                 </div>
                                 <ul className="space-y-2 max-h-60 overflow-y-auto mb-6 pr-2">
                                     {units.map(u => (
                                         <li key={u} className="flex justify-between items-center bg-slate-50 p-3 rounded-lg border border-slate-200">
                                             <span className="font-bold text-slate-700">{u}</span>
-                                            <button onClick={() => removeUnit(u)} className="text-red-500 font-bold text-sm px-2 hover:bg-red-50 rounded transition">削除</button>
+                                            <button onClick={() => removeUnit(u)} className="text-red-500 font-bold text-sm px-2">削除</button>
                                         </li>
                                     ))}
                                 </ul>
-                                <button onClick={() => setShowUnitModal(false)} className="w-full p-3 bg-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-300 transition">閉じる</button>
+                                <button onClick={() => setShowUnitModal(false)} className="w-full p-3 bg-slate-200 text-slate-700 rounded-xl font-bold">閉じる</button>
                             </div>
                         </div>
                     )}
