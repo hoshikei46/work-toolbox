@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta name="robots" content="noindex, nofollow">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>休暇時間計算アプリ v1.5</title>
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --bg-color: #f4f7f6;
+            --card-bg: #ffffff;
+            --tab-inactive: #ecf0f1;
+            --color-a: #e67e22; --color-b: #3498db; --color-c: #27ae60; --color-d: #9b59b6;
+            --bg-a: #fdf2e9; --bg-b: #ebf5fb; --bg-c: #eafaf1; --bg-d: #f5eef8;
+            --error-color: #d9534f;
+        }
+        body { font-family: sans-serif; background-color: var(--bg-color); margin: 0; padding: 10px; display: flex; justify-content: center; color: #333; }
+        .container { width: 100%; max-width: 600px; background: var(--card-bg); border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); padding: 20px; box-sizing: border-box; }
+        h1 { text-align: center; color: var(--primary-color); font-size: 1.4rem; margin: 10px 0; }
+        h2 { font-size: 1.1rem; border-bottom: 2px solid var(--bg-color); padding-bottom: 5px; margin-top: 20px; }
+
+        .tabs { display: flex; margin-bottom: 20px; border-bottom: 2px solid #ddd; }
+        .tab-btn { flex: 1; padding: 12px; text-align: center; cursor: pointer; background: var(--tab-inactive); font-weight: bold; color: #7f8c8d; border-radius: 8px 8px 0 0; transition: 0.2s; }
+        .tab-btn.active { background: var(--primary-color); color: white; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        .calc-section { background-color: #eaf6ff; padding: 15px; border-radius: 8px; margin-bottom: 15px; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; font-size: 0.9rem; }
+        
+        .form-group { margin-bottom: 12px; }
+        select { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 1rem; background: #fff; box-sizing: border-box; }
+        
+        .radio-group { display: flex; justify-content: space-between; gap: 6px; margin-bottom: 10px; }
+        .radio-label { flex: 1; text-align: center; padding: 15px 2px; cursor: pointer; font-weight: bold; border-radius: 8px; border: 2px solid #ddd; background: white; color: #7f8c8d; font-size: 0.85rem; box-sizing: border-box; }
+        .radio-input { display: none; }
+        .radio-input[value="a"]:checked + .radio-label { background: var(--color-a)!important; border-color: var(--color-a)!important; color: white!important; }
+        .radio-input[value="b"]:checked + .radio-label { background: var(--color-b)!important; border-color: var(--color-b)!important; color: white!important; }
+        .radio-input[value="c"]:checked + .radio-label { background: var(--color-c)!important; border-color: var(--color-c)!important; color: white!important; }
+        .radio-input[value="d"]:checked + .radio-label { background: var(--color-d)!important; border-color: var(--color-d)!important; color: white!important; }
+
+        #currentPatternInfo { font-size: 1rem; font-weight: bold; text-align: center; padding: 10px; background: #fff; border-radius: 10px; border: 2px solid #ddd; margin-top: 10px; word-break: break-all; }
+
+        .result-box { background: var(--primary-color); color: #fff; text-align: center; padding: 20px; border-radius: 10px; margin-top: 20px; }
+        .result-value { font-size: 2.6rem; font-weight: bold; }
+        .result-sub { font-size: 0.95rem; margin-top: 12px; background: rgba(255,255,255,0.2); padding: 10px; border-radius: 6px; line-height: 1.4; }
+
+        #settingsDetails { border: 1px solid #ddd; border-radius: 10px; padding: 15px; background: #fff; margin-top: 20px; }
+        summary { font-weight: bold; cursor: pointer; color: var(--primary-color); outline: none; padding: 5px 0; }
+        .pattern-config { border: 1px solid #eee; padding: 12px; margin-bottom: 12px; border-radius: 8px; background: #fafafa; }
+        
+        /* スマホで折り返せるようにFlexboxを調整 */
+        .time-input-wrap { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; font-size: 0.85rem; }
+        .time-input-wrap select { width: auto; flex: 1; min-width: 80px; padding: 10px 4px; font-size: 0.9rem; }
+        
+        .pattern-name-input { width: 100px; padding: 8px; margin-bottom: 5px; border-radius: 6px; border: 1px solid #ccc; font-weight: bold; font-size: 0.9rem; }
+        .btn-save { width: 100%; padding: 14px; background: var(--primary-color); color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 1rem; margin-top: 10px; }
+        
+        .admin-section { background: #fff3cd; border: 1px solid #ffeeba; padding: 15px; border-radius: 8px; margin-top: 20px; }
+        .btn-export { background: #856404; color: white; border: none; padding: 14px; width: 100%; border-radius: 8px; cursor: pointer; font-weight: bold; margin-top: 8px; font-size: 0.95rem;}
+        
+        .mode-switch { display: flex; gap: 10px; margin-bottom: 15px; }
+        .mode-btn { flex: 1; padding: 12px; border: 2px solid var(--primary-color); color: var(--primary-color); background: #fff; border-radius: 8px; cursor: pointer; text-align: center; font-weight: bold; font-size: 0.95rem; }
+        .mode-btn.active { background: var(--primary-color); color: #fff; }
+
+        .locked-mode #settingsDetails { display: none !important; }
+
+        /* スマホ向けレスポンシブ調整 */
+        @media (max-width: 480px) {
+            body { padding: 5px; }
+            .container { padding: 15px; }
+            h1 { font-size: 1.25rem; }
+            .radio-label { padding: 12px 0; font-size: 0.8rem; }
+            .result-value { font-size: 2.2rem; }
+            .result-sub { font-size: 0.85rem; }
+            .time-input-wrap select { min-width: 70px; padding: 8px 2px; }
+            .mode-btn { padding: 10px 5px; font-size: 0.85rem; }
+        }
+    </style>
+</head>
+<body id="mainBody">
+
+<div class="container">
+    <h1>休暇時間計算アプリ</h1>
+    <div class="tabs">
+        <div class="tab-btn active" onclick="switchTab('calc')">取得時刻から</div>
+        <div class="tab-btn" onclick="switchTab('reverse')">取得時間から</div>
+    </div>
+    
+    <div class="calc-section">
+        <label>休憩パターンの選択</label>
+        <div class="radio-group">
+            <input type="radio" id="p_a" name="pattern" value="a" class="radio-input" checked><label for="p_a" class="radio-label" id="label_a">A</label>
+            <input type="radio" id="p_b" name="pattern" value="b" class="radio-input"><label for="p_b" class="radio-label" id="label_b">B</label>
+            <input type="radio" id="p_c" name="pattern" value="c" class="radio-input"><label for="p_c" class="radio-label" id="label_c">C</label>
+            <input type="radio" id="p_d" name="pattern" value="d" class="radio-input"><label for="p_d" class="radio-label" id="label_d">D</label>
+        </div>
+        <div id="currentPatternInfo"></div>
+    </div>
+
+    <div id="tab-calc" class="tab-content active">
+        <div class="calc-section">
+            <div class="form-group"><label>休暇開始時刻</label><select id="leaveStart"></select></div>
+            <div class="form-group"><label>休暇終了時刻</label><select id="leaveEnd"></select></div>
+        </div>
+        <div class="result-box">
+            <div class="result-value" id="resultValue">--</div>
+            <div class="result-sub" id="c4thHint">C4thに入力する際には、休憩時間0分と入力してください。</div>
+        </div>
+    </div>
+
+    <div id="tab-reverse" class="tab-content">
+        <div class="calc-section">
+            <div class="mode-switch">
+                <div class="mode-btn active" id="btn-late" onclick="setReverseMode('late')">遅れて出勤</div>
+                <div class="mode-btn" id="btn-early" onclick="setReverseMode('early')">早く退勤</div>
+            </div>
+            <div class="form-group"><label>取得したい休暇の長さ</label><select id="targetDuration"></select></div>
+        </div>
+        <div class="result-box">
+            <div class="result-value" id="resultReverseValue">--:--</div>
+            <div class="result-sub" id="c4thHintReverse">C4thに入力する際には、--:--～--:--　休憩時間--分と入力してください。</div>
+        </div>
+    </div>
+
+    <details id="settingsDetails">
+        <summary>⚙️ 勤務・休憩の設定（管理者用）</summary>
+        <div class="settings-content">
+            <h2>勤務時間（8時間30分に設定）</h2>
+            <div class="time-input-wrap">
+                始業: <select id="settingWorkStart" class="setting-time-select"></select> 
+                終業: <select id="settingWorkEnd" class="setting-time-select"></select>
+            </div>
+            
+            <h2>休憩パターン設定 (各45分)</h2>
+            <div class="pattern-config" style="border-left: 5px solid var(--color-a);">
+                表示名: <input type="text" id="name_a" class="pattern-name-input" placeholder="A">
+                <div class="time-input-wrap">
+                    <select id="pa1_s" class="setting-time-select"></select><span>~</span><select id="pa1_e" class="setting-time-select"></select> 
+                    <span>/</span> 
+                    <select id="pa2_s" class="setting-time-select"></select><span>~</span><select id="pa2_e" class="setting-time-select"></select>
+                </div>
+            </div>
+            <div class="pattern-config" style="border-left: 5px solid var(--color-b);">
+                表示名: <input type="text" id="name_b" class="pattern-name-input" placeholder="B">
+                <div class="time-input-wrap">
+                    <select id="pb1_s" class="setting-time-select"></select><span>~</span><select id="pb1_e" class="setting-time-select"></select> 
+                    <span>/</span> 
+                    <select id="pb2_s" class="setting-time-select"></select><span>~</span><select id="pb2_e" class="setting-time-select"></select>
+                </div>
+            </div>
+            <div class="pattern-config" style="border-left: 5px solid var(--color-c);">
+                表示名: <input type="text" id="name_c" class="pattern-name-input" placeholder="C">
+                <div class="time-input-wrap">
+                    <select id="pc1_s" class="setting-time-select"></select><span>~</span><select id="pc1_e" class="setting-time-select"></select> 
+                    <span>/</span> 
+                    <select id="pc2_s" class="setting-time-select"></select><span>~</span><select id="pc2_e" class="setting-time-select"></select>
+                </div>
+            </div>
+            <div class="pattern-config" style="border-left: 5px solid var(--color-d);">
+                表示名: <input type="text" id="name_d" class="pattern-name-input" placeholder="D">
+                <div class="time-input-wrap">
+                    <select id="pd_s" class="setting-time-select"></select><span>~</span><select id="pd_e" class="setting-time-select"></select>
+                </div>
+            </div>
+            
+            <button class="btn-save" onclick="handleSave()">現在の設定を保存</button>
+            
+            <div class="admin-section">
+                <div style="font-weight:bold; color:#856404; font-size:0.9rem;">配布用ファイルの書き出し</div>
+                <button class="btn-export" onclick="handleExport(false)">1. 設定を埋めたファイルを保存</button>
+                <button class="btn-export" style="background:#d9534f;" onclick="handleExport(true)">2. 設定をロックして保存 (推奨)</button>
+            </div>
+        </div>
+    </details>
+</div>
+
+<script>
+    const config = {
+        isLocked: false,
+        settings: {
+            // 初期値を指定された時間に変更
+            workStart: "08:15", workEnd: "16:45",
+            patterns: {
+                a: { name: "A", split: true,  t1s: "10:20", t1e: "10:40", t2s: "13:05", t2e: "13:30" },
+                b: { name: "B", split: true,  t1s: "10:20", t1e: "10:40", t2s: "15:20", t2e: "15:45" },
+                c: { name: "C", split: true,  t1s: "12:40", t1e: "13:00", t2s: "14:20", t2e: "14:45" },
+                d: { name: "D", split: false, t1s: "12:00", t1e: "12:45" }
+            }
+        }
+    };
+
+    const patternColors = { a: "#e67e22", b: "#3498db", c: "#27ae60", d: "#9b59b6" };
+    const patternBgs = { a: "#fdf2e9", b: "#ebf5fb", c: "#eafaf1", d: "#f5eef8" };
+    let curSettings = config.settings;
+    let reverseMode = 'late';
+
+    function timeToMins(t) { if(!t)return 0; const [h,m]=t.split(':').map(Number); return h*60+m; }
+    function minsToTime(m) { const hh=Math.floor(m/60),mm=m%60; return `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`; }
+
+    window.onload = function() {
+        if(config.isLocked) document.body.classList.add('locked-mode');
+        initDropdowns();
+        loadInputs();
+        updateButtonLabels();
+        renderMainDropdowns();
+        calculate();
+        calculateReverse();
+    };
+
+    function initDropdowns() {
+        document.querySelectorAll('.setting-time-select').forEach(sel => {
+            sel.innerHTML = '';
+            for (let t=0; t<24*60; t+=5) { const v=minsToTime(t); sel.add(new Option(v, v)); }
+        });
+    }
+
+    function loadInputs() {
+        const s = curSettings;
+        document.getElementById('settingWorkStart').value = s.workStart;
+        document.getElementById('settingWorkEnd').value = s.workEnd;
+        const p = s.patterns;
+        document.getElementById('name_a').value = p.a.name || "A";
+        document.getElementById('name_b').value = p.b.name || "B";
+        document.getElementById('name_c').value = p.c.name || "C";
+        document.getElementById('name_d').value = p.d.name || "D";
+
+        const setV = (id, v) => { if(document.getElementById(id)) document.getElementById(id).value = v; };
+        setV('pa1_s', p.a.t1s); setV('pa1_e', p.a.t1e); setV('pa2_s', p.a.t2s); setV('pa2_e', p.a.t2e);
+        setV('pb1_s', p.b.t1s); setV('pb1_e', p.b.t1e); setV('pb2_s', p.b.t2s); setV('pb2_e', p.b.t2e);
+        setV('pc1_s', p.c.t1s); setV('pc1_e', p.c.t1e); setV('pc2_s', p.c.t2s); setV('pc2_e', p.c.t2e);
+        setV('pd_s', p.d.t1s); setV('pd_e', p.d.t1e);
+    }
+
+    function updateButtonLabels() {
+        const p = curSettings.patterns;
+        document.getElementById('label_a').textContent = p.a.name || "A";
+        document.getElementById('label_b').textContent = p.b.name || "B";
+        document.getElementById('label_c').textContent = p.c.name || "C";
+        document.getElementById('label_d').textContent = p.d.name || "D";
+    }
+
+    function validateSettings() {
+        const getV = (id) => document.getElementById(id).value;
+        const wS = timeToMins(getV('settingWorkStart'));
+        const wE = timeToMins(getV('settingWorkEnd'));
+        if ((wE - wS) !== 510) { alert(`【勤務時間エラー】\n勤務時間が8時間30分になっていません。`); return false; }
+        const checkBreak = (mins, label) => {
+            if (mins !== 45) { alert(`【休憩時間エラー：${label}】\n休憩時間の合計が45分になっていません。`); return false; }
+            return true;
+        };
+        const bA = (timeToMins(getV('pa1_e')) - timeToMins(getV('pa1_s'))) + (timeToMins(getV('pa2_e')) - timeToMins(getV('pa2_s')));
+        const bB = (timeToMins(getV('pb1_e')) - timeToMins(getV('pb1_s'))) + (timeToMins(getV('pb2_e')) - timeToMins(getV('pb2_s')));
+        const bC = (timeToMins(getV('pc1_e')) - timeToMins(getV('pc1_s'))) + (timeToMins(getV('pc2_e')) - timeToMins(getV('pc2_s')));
+        const bD = (timeToMins(getV('pd_e')) - timeToMins(getV('pd_s')));
+        if (!checkBreak(bA, getV('name_a'))) return false;
+        if (!checkBreak(bB, getV('name_b'))) return false;
+        if (!checkBreak(bC, getV('name_c'))) return false;
+        if (!checkBreak(bD, getV('name_d'))) return false;
+        return true;
+    }
+
+    function handleSave() {
+        if (!validateSettings()) return;
+        const getV = (id) => document.getElementById(id).value;
+        curSettings.workStart = getV('settingWorkStart'); curSettings.workEnd = getV('settingWorkEnd');
+        const p = curSettings.patterns;
+        p.a.name = getV('name_a'); p.a.t1s = getV('pa1_s'); p.a.t1e = getV('pa1_e'); p.a.t2s = getV('pa2_s'); p.a.t2e = getV('pa2_e');
+        p.b.name = getV('name_b'); p.b.t1s = getV('pb1_s'); p.b.t1e = getV('pb1_e'); p.b.t2s = getV('pb2_s'); p.b.t2e = getV('pb2_e');
+        p.c.name = getV('name_c'); p.c.t1s = getV('pc1_s'); p.c.t1e = getV('pc1_e'); p.c.t2s = getV('pc2_s'); p.c.t2e = getV('pc2_e');
+        p.d.name = getV('name_d'); p.d.t1s = getV('pd_s'); p.d.t1e = getV('pd_e');
+        updateButtonLabels(); alert("設定を保存しました。"); renderMainDropdowns(); calculate(); calculateReverse();
+    }
+
+    function handleExport(lock) {
+        if (!validateSettings()) return;
+        let html = document.documentElement.outerHTML;
+        const newConfig = { isLocked: lock, settings: curSettings };
+        const regex = /(const config = )\{[\s\S]*?\};/;
+        const finalHtml = html.replace(regex, `$1${JSON.stringify(newConfig, null, 4)};`);
+        const blob = new Blob([finalHtml], { type: 'text/html' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = lock ? '休暇計算アプリ_職員配布用.html' : '休暇計算アプリ_設定済.html';
+        a.click();
+    }
+
+    function renderMainDropdowns() {
+        const startSel = document.getElementById('leaveStart'), endSel = document.getElementById('leaveEnd'), durSel = document.getElementById('targetDuration');
+        const oldS = startSel.value, oldE = endSel.value;
+        startSel.innerHTML = ''; endSel.innerHTML = ''; durSel.innerHTML = '';
+        const wS = timeToMins(curSettings.workStart), wE = timeToMins(curSettings.workEnd);
+        for (let t=wS; t<=wE; t+=5) { const v=minsToTime(t); startSel.add(new Option(v,v)); endSel.add(new Option(v,v)); }
+        startSel.value = oldS || curSettings.workStart; endSel.value = oldE || curSettings.workEnd;
+        for (let m=30; m<=480; m+=30) durSel.add(new Option(m%60===0 ? `${m/60}時間` : `${Math.floor(m/60)}時間${m%60}分`, m));
+    }
+
+    function calculate() {
+        const res = document.getElementById('resultValue'), hint = document.getElementById('c4thHint'), lS = timeToMins(document.getElementById('leaveStart').value), lE = timeToMins(document.getElementById('leaveEnd').value);
+        let sk = 'a'; document.getElementsByName('pattern').forEach(r => { if(r.checked) sk=r.value; });
+        const p = curSettings.patterns[sk], info = document.getElementById('currentPatternInfo');
+        
+        info.innerHTML = `休憩：${p.split ? p.t1s+'~'+p.t1e+' / '+p.t2s+'~'+p.t2e : p.t1s+'~'+p.t1e}`;
+        info.style.borderColor = patternColors[sk]; info.style.color = patternColors[sk]; info.style.backgroundColor = patternBgs[sk];
+        
+        if (lE <= lS) { 
+            res.innerHTML = '<span style="font-size: 1.4rem;">休暇時間を入力してください。</span>'; 
+            hint.textContent = "-"; 
+            return; 
+        }
+        const getO = (s1, e1, s2, e2) => Math.max(0, Math.min(e1, e2) - Math.max(s1, s2));
+        let ov = getO(lS, lE, timeToMins(p.t1s), timeToMins(p.t1e));
+        if(p.split) ov += getO(lS, lE, timeToMins(p.t2s), timeToMins(p.t2e));
+        
+        const net = (lE-lS)-ov;
+        if(net<=0){ res.textContent="0分"; hint.textContent = "C4thに入力する際には、休憩時間0分と入力してください。"; return; }
+        
+        if (net >= 465) {
+            res.textContent = "1日";
+        } else {
+            const rnd = Math.ceil(net/30)*30;
+            res.textContent = `${Math.floor(rnd/60)}時間${rnd%60}分`;
+        }
+        
+        hint.textContent = `C4thに入力する際には、休憩時間${ov}分と入力してください。`;
+    }
+
+    function calculateReverse() {
+        const res = document.getElementById('resultReverseValue');
+        const hintRev = document.getElementById('c4thHintReverse');
+        const target = parseInt(document.getElementById('targetDuration').value, 10);
+        
+        let sk = 'a'; document.getElementsByName('pattern').forEach(r => { if(r.checked) sk=r.value; });
+        const p = curSettings.patterns[sk], breaks = [{s:timeToMins(p.t1s),e:timeToMins(p.t1e)}];
+        if(p.split) breaks.push({s:timeToMins(p.t2s),e:timeToMins(p.t2e)});
+        
+        const isB = (m) => breaks.some(b => m>=b.s && m<b.e);
+        let cur = reverseMode==='late' ? timeToMins(curSettings.workStart) : timeToMins(curSettings.workEnd), cons = 0;
+        
+        while(cons < target) {
+            if(reverseMode==='late') { if(!isB(cur)) cons++; cur++; }
+            else { cur--; if(!isB(cur)) cons++; }
+        }
+        
+        res.textContent = minsToTime(cur);
+
+        let lS, lE;
+        if (reverseMode === 'late') {
+            lS = timeToMins(curSettings.workStart);
+            lE = cur;
+        } else {
+            lS = cur;
+            lE = timeToMins(curSettings.workEnd);
+        }
+
+        const getO = (s1, e1, s2, e2) => Math.max(0, Math.min(e1, e2) - Math.max(s1, s2));
+        let ov = getO(lS, lE, timeToMins(p.t1s), timeToMins(p.t1e));
+        if (p.split) ov += getO(lS, lE, timeToMins(p.t2s), timeToMins(p.t2e));
+
+        hintRev.textContent = `C4thに入力する際には、${minsToTime(lS)}～${minsToTime(lE)}　休憩時間${ov}分と入力してください。`;
+    }
+
+    function switchTab(t) {
+        document.querySelectorAll('.tab-btn').forEach((b,i)=>b.classList.toggle('active', (t==='calc'?i===0:i===1)));
+        document.getElementById('tab-calc').classList.toggle('active', t==='calc');
+        document.getElementById('tab-reverse').classList.toggle('active', t==='reverse');
+    }
+    function setReverseMode(m) {
+        reverseMode = m;
+        document.getElementById('btn-late').classList.toggle('active', m==='late');
+        document.getElementById('btn-early').classList.toggle('active', m==='early');
+        calculateReverse();
+    }
+    function setupEventListeners() {
+        document.getElementById('leaveStart').onchange = calculate;
+        document.getElementById('leaveEnd').onchange = calculate;
+        document.getElementById('targetDuration').onchange = calculateReverse;
+        document.getElementsByName('pattern').forEach(r => r.onchange = ()=>{ calculate(); calculateReverse(); });
+    }
+    setupEventListeners();
+</script>
+</body>
+</html>
