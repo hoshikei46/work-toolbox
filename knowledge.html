@@ -16,7 +16,6 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        // SmartStockerと同じ設定値を組み込み済みです
         const firebaseConfig = {
             apiKey: "AIzaSyBA4GCW-DXP2SenQBotyF0G5PVZ5IPrpTc",
             authDomain: "work-stock-app.firebaseapp.com",
@@ -32,67 +31,83 @@
         const db = firebase.firestore();
         const { useState, useEffect, useMemo } = React;
 
-        const defaultCategories = ['年度・行事', '財務・経理', '施設・設備', '教職員・人事', 'システム・機器'];
+        const defaultCategories = ['年度・行事', '給与・手当', '出張・旅費', '福利厚生', '人事・服務', '施設・設備', 'システム・機器'];
         const defaultTimings = ['4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月', '1月', '2月', '3月', '毎月', '期末・月末', '不定期'];
+        // ★ 8つの強力な初期タグ
+        const defaultTags = ['規程・ルール', '作業手順', 'Tips・コツ', '様式・フォーマット', '法改正・通達', 'トラブル対応', 'システム操作', 'よくある質問'];
 
         function App() {
-            // SmartStockerと同じグループIDを共有できるようにキーを合わせることも可能ですが、今回は独立してログインさせます
             const [groupId, setGroupId] = useState(localStorage.getItem('smartknowledge_group') || '');
             const [isLoggedIn, setIsLoggedIn] = useState(!!groupId);
             const [items, setItems] = useState([]);
             
-            // マスターデータ
             const [categories, setCategories] = useState(defaultCategories);
             const [timings, setTimings] = useState(defaultTimings);
+            const [tagsMaster, setTagsMaster] = useState(defaultTags); 
             const [errorMsg, setErrorMsg] = useState('');
 
-            // 検索・フィルター用ステート
             const [searchQuery, setSearchQuery] = useState('');
             const [filterCategory, setFilterCategory] = useState('');
             const [filterTiming, setFilterTiming] = useState('');
+            const [filterTag, setFilterTag] = useState(''); 
             const [filterAttentionOnly, setFilterAttentionOnly] = useState(false);
 
-            // モーダル管理
             const [showCategoryModal, setShowCategoryModal] = useState(false);
             const [showTimingModal, setShowTimingModal] = useState(false);
+            const [showTagModal, setShowTagModal] = useState(false); 
+            
             const [newCategoryInput, setNewCategoryInput] = useState('');
             const [newTimingInput, setNewTimingInput] = useState('');
+            const [newTagInput, setNewTagInput] = useState(''); 
 
-            // 登録・編集フォーム用モーダル
             const [itemModal, setItemModal] = useState({ isOpen: false, mode: 'add', itemId: null });
             const [formData, setFormData] = useState({
-                title: '', category: defaultCategories[0], timing: defaultTimings[0], stakeholders: '', fileLocation: '', content: '', needsAttention: false
+                title: '', category: defaultCategories[0], timing: defaultTimings[0], stakeholders: '', fileLocation: '', content: '', needsAttention: false, selectedTags: [] 
             });
 
             useEffect(() => {
                 if (!isLoggedIn) return;
                 
-                // ナレッジデータの取得（knowledgeコレクションを使用）
                 const unsubItems = db.collection(`groups/${groupId}/knowledge`).orderBy('updatedAt', 'desc').onSnapshot((snapshot) => {
                     const itemsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     setItems(itemsData);
                     setErrorMsg('');
                 }, (err) => setErrorMsg("データ取得エラー: アクセス権限がありません。"));
 
-                // カテゴリマスターの取得
                 const unsubCategories = db.collection(`groups/${groupId}/settings`).doc('knowledge_categories').onSnapshot((docSnap) => {
                     if (docSnap.exists) setCategories(docSnap.data().list || defaultCategories);
                 });
 
-                // 時期マスターの取得
                 const unsubTimings = db.collection(`groups/${groupId}/settings`).doc('knowledge_timings').onSnapshot((docSnap) => {
                     if (docSnap.exists) setTimings(docSnap.data().list || defaultTimings);
                 });
 
-                return () => { unsubItems(); unsubCategories(); unsubTimings(); };
+                // ★ データベースのタグが空っぽになっていた場合の自己修復機能を搭載！
+                const unsubTags = db.collection(`groups/${groupId}/settings`).doc('knowledge_tags').onSnapshot((docSnap) => {
+                    if (docSnap.exists) {
+                        const fetchedList = docSnap.data().list;
+                        if (fetchedList && fetchedList.length > 0) {
+                            setTagsMaster(fetchedList);
+                        } else {
+                            // 空の場合は初期値を再設定する
+                            setTagsMaster(defaultTags);
+                            db.collection(`groups/${groupId}/settings`).doc('knowledge_tags').set({ list: defaultTags });
+                        }
+                    } else {
+                        setTagsMaster(defaultTags);
+                        db.collection(`groups/${groupId}/settings`).doc('knowledge_tags').set({ list: defaultTags });
+                    }
+                });
+
+                return () => { unsubItems(); unsubCategories(); unsubTimings(); unsubTags(); };
             }, [isLoggedIn, groupId]);
 
-            // 絞り込みと検索ロジック
             const displayedItems = useMemo(() => {
                 let filtered = items;
                 if (filterAttentionOnly) filtered = filtered.filter(item => item.needsAttention);
                 if (filterCategory) filtered = filtered.filter(item => item.category === filterCategory);
                 if (filterTiming) filtered = filtered.filter(item => item.timing === filterTiming);
+                if (filterTag) filtered = filtered.filter(item => item.selectedTags && item.selectedTags.includes(filterTag)); 
                 if (searchQuery) {
                     const q = searchQuery.toLowerCase();
                     filtered = filtered.filter(item => 
@@ -102,7 +117,7 @@
                     );
                 }
                 return filtered;
-            }, [items, filterAttentionOnly, filterCategory, filterTiming, searchQuery]);
+            }, [items, filterAttentionOnly, filterCategory, filterTiming, filterTag, searchQuery]);
 
             const handleLogin = (e) => {
                 e.preventDefault();
@@ -121,20 +136,20 @@
             };
 
             const openAddModal = () => {
-                setFormData({ title: '', category: categories[0] || defaultCategories[0], timing: timings[0] || defaultTimings[0], stakeholders: '', fileLocation: '', content: '', needsAttention: false });
+                setFormData({ title: '', category: categories[0] || defaultCategories[0], timing: timings[0] || defaultTimings[0], stakeholders: '', fileLocation: '', content: '', needsAttention: false, selectedTags: [] });
                 setItemModal({ isOpen: true, mode: 'add', itemId: null });
             };
 
             const openEditModal = (item) => {
                 setFormData({
                     title: item.title, category: item.category || categories[0], timing: item.timing || timings[0],
-                    stakeholders: item.stakeholders || '', fileLocation: item.fileLocation || '', content: item.content || '', needsAttention: item.needsAttention || false
+                    stakeholders: item.stakeholders || '', fileLocation: item.fileLocation || '', content: item.content || '', needsAttention: item.needsAttention || false, selectedTags: item.selectedTags || []
                 });
                 setItemModal({ isOpen: true, mode: 'edit', itemId: item.id });
             };
 
             const deleteItem = (id, title) => {
-                if(window.confirm(`「${title}」を完全に削除しますか？この操作は取り消せません。`)) {
+                if(window.confirm(`「${title}」を完全に削除しますか？`)) {
                     db.collection(`groups/${groupId}/knowledge`).doc(id).delete();
                 }
             };
@@ -153,23 +168,52 @@
                 }
             };
 
-            // マスターの追加・削除
-            const addCategory = () => {
-                const trimmed = newCategoryInput.trim();
-                if(trimmed) db.collection(`groups/${groupId}/settings`).doc('knowledge_categories').update({ list: [...new Set([...categories, trimmed])] }).then(() => setNewCategoryInput(''));
-                else db.collection(`groups/${groupId}/settings`).doc('knowledge_categories').set({ list: [...new Set([...categories, trimmed])] });
-            };
-            const removeCategory = (c) => {
-                if(window.confirm(`「${c}」を削除しますか？`)) db.collection(`groups/${groupId}/settings`).doc('knowledge_categories').update({ list: categories.filter(x => x !== c) });
+            // 複数タグ選択機能（トグル）
+            const toggleTag = (tag) => {
+                setFormData(prev => {
+                    const currentTags = prev.selectedTags || [];
+                    if (currentTags.includes(tag)) {
+                        return { ...prev, selectedTags: currentTags.filter(t => t !== tag) };
+                    } else {
+                        return { ...prev, selectedTags: [...currentTags, tag] };
+                    }
+                });
             };
 
-            const addTiming = () => {
-                const trimmed = newTimingInput.trim();
-                if(trimmed) db.collection(`groups/${groupId}/settings`).doc('knowledge_timings').update({ list: [...new Set([...timings, trimmed])] }).then(() => setNewTimingInput(''));
-                else db.collection(`groups/${groupId}/settings`).doc('knowledge_timings').set({ list: [...new Set([...timings, trimmed])] });
+            const addCategory = () => { 
+                const t = newCategoryInput.trim(); 
+                if(!t) return;
+                const updatedList = [...new Set([...categories, t])];
+                db.collection(`groups/${groupId}/settings`).doc('knowledge_categories').set({ list: updatedList }, { merge: true }).then(() => setNewCategoryInput('')); 
             };
-            const removeTiming = (t) => {
-                if(window.confirm(`「${t}」を削除しますか？`)) db.collection(`groups/${groupId}/settings`).doc('knowledge_timings').update({ list: timings.filter(x => x !== t) });
+            const removeCategory = (c) => { 
+                if(window.confirm(`「${c}」を削除しますか？`)) {
+                    db.collection(`groups/${groupId}/settings`).doc('knowledge_categories').set({ list: categories.filter(x => x !== c) }, { merge: true }); 
+                }
+            };
+
+            const addTiming = () => { 
+                const t = newTimingInput.trim(); 
+                if(!t) return;
+                const updatedList = [...new Set([...timings, t])];
+                db.collection(`groups/${groupId}/settings`).doc('knowledge_timings').set({ list: updatedList }, { merge: true }).then(() => setNewTimingInput('')); 
+            };
+            const removeTiming = (t) => { 
+                if(window.confirm(`「${t}」を削除しますか？`)) {
+                    db.collection(`groups/${groupId}/settings`).doc('knowledge_timings').set({ list: timings.filter(x => x !== t) }, { merge: true }); 
+                }
+            };
+
+            const addTag = () => { 
+                const t = newTagInput.trim(); 
+                if(!t) return;
+                const updatedList = [...new Set([...tagsMaster, t])];
+                db.collection(`groups/${groupId}/settings`).doc('knowledge_tags').set({ list: updatedList }, { merge: true }).then(() => setNewTagInput('')); 
+            };
+            const removeTag = (t) => { 
+                if(window.confirm(`「${t}」を削除しますか？`)) {
+                    db.collection(`groups/${groupId}/settings`).doc('knowledge_tags').set({ list: tagsMaster.filter(x => x !== t) }, { merge: true }); 
+                }
             };
 
             if (!isLoggedIn) {
@@ -202,23 +246,29 @@
 
                     {errorMsg && <div className="bg-red-50 border-2 border-red-200 text-red-700 p-4 rounded-xl mb-6 font-bold">{errorMsg}</div>}
 
-                    {/* ★ 強力な検索・フィルターエリア */}
+                    {/* 検索・フィルターエリア */}
                     <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 mb-6 space-y-3">
                         <div className="flex flex-col sm:flex-row gap-3">
                             <div className="flex-1 relative">
                                 <span className="absolute left-3 top-3 text-slate-400">🔍</span>
-                                <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="キーワードで探す (例: 奨学金、トナー)" className="w-full pl-10 p-3 border-2 border-slate-200 rounded-xl outline-none focus:border-emerald-500 font-bold" />
+                                <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="キーワードで探す" className="w-full pl-10 p-3 border-2 border-slate-200 rounded-xl outline-none focus:border-emerald-500 font-bold" />
                             </div>
-                            <div className="w-full sm:w-48">
+                            <div className="w-full sm:w-40">
                                 <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="w-full p-3 border-2 border-slate-200 rounded-xl outline-none focus:border-emerald-500 font-bold text-slate-700 bg-slate-50">
                                     <option value="">すべての分野</option>
                                     {categories.map(c => <option key={c} value={c}>{c}</option>)}
                                 </select>
                             </div>
-                            <div className="w-full sm:w-40">
+                            <div className="w-full sm:w-32">
                                 <select value={filterTiming} onChange={(e) => setFilterTiming(e.target.value)} className="w-full p-3 border-2 border-slate-200 rounded-xl outline-none focus:border-emerald-500 font-bold text-slate-700 bg-slate-50">
                                     <option value="">すべての時期</option>
                                     {timings.map(t => <option key={t} value={t}>{t}</option>)}
+                                </select>
+                            </div>
+                            <div className="w-full sm:w-40">
+                                <select value={filterTag} onChange={(e) => setFilterTag(e.target.value)} className="w-full p-3 border-2 border-slate-200 rounded-xl outline-none focus:border-emerald-500 font-bold text-slate-700 bg-slate-50">
+                                    <option value="">すべてのタグ</option>
+                                    {tagsMaster.map(t => <option key={t} value={t}>{t}</option>)}
                                 </select>
                             </div>
                         </div>
@@ -230,7 +280,6 @@
                         </div>
                     </div>
 
-                    {/* ナレッジ一覧 */}
                     <div className="grid gap-4">
                         {displayedItems.length === 0 && (
                             <p className="text-slate-500 font-bold text-center py-16 bg-white rounded-2xl border border-dashed border-slate-300">
@@ -245,6 +294,11 @@
                                             {item.needsAttention && <span className="bg-amber-500 text-white text-xs font-black px-2 py-1 rounded-md animate-pulse">⚠️ 要確認</span>}
                                             <span className="bg-emerald-100 text-emerald-700 text-xs font-bold px-2 py-1 rounded-md">{item.category}</span>
                                             <span className="bg-slate-100 text-slate-600 text-xs font-bold px-2 py-1 rounded-md">📅 {item.timing}</span>
+                                            
+                                            {/* 一覧画面でのタグ表示 */}
+                                            {item.selectedTags && item.selectedTags.map(tag => (
+                                                <span key={tag} className="bg-blue-50 text-blue-600 border border-blue-200 text-xs font-bold px-2 py-1 rounded-full">🏷️ {tag}</span>
+                                            ))}
                                         </div>
                                         <h3 className="text-xl sm:text-2xl font-black text-slate-800 leading-tight mb-1">{item.title}</h3>
                                         <p className="text-xs font-bold text-slate-400">最終更新: {formatDate(item.updatedAt)}</p>
@@ -255,14 +309,12 @@
                                     </div>
                                 </div>
 
-                                {/* 本文（改行を保持して表示） */}
                                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 mb-4 whitespace-pre-wrap text-sm text-slate-700 font-medium leading-relaxed">
                                     {item.content || "（手順の記載がありません）"}
                                 </div>
 
-                                {/* 補足情報エリア */}
                                 {(item.stakeholders || item.fileLocation) && (
-                                    <div className="grid sm:grid-cols-2 gap-3 text-sm">
+                                    <div className="grid sm:grid-cols-2 gap-3 text-sm border-t border-slate-100 pt-4">
                                         {item.stakeholders && (
                                             <div className="flex items-start gap-2 bg-white p-3 rounded-lg border border-slate-100">
                                                 <span className="text-slate-400">📞</span>
@@ -287,12 +339,11 @@
                         ))}
                     </div>
 
-                    {/* FAB (スマホ用追加ボタン) */}
                     <button onClick={openAddModal} className="fixed bottom-6 right-6 w-16 h-16 bg-emerald-600 text-white rounded-full shadow-lg shadow-emerald-300 flex items-center justify-center text-3xl font-bold hover:bg-emerald-700 hover:scale-105 active:scale-95 transition z-30">
                         +
                     </button>
 
-                    {/* ★ 登録・編集モーダル */}
+                    {/* 登録・編集モーダル */}
                     {itemModal.isOpen && (
                         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-40 overflow-y-auto py-10">
                             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl p-6 relative">
@@ -303,7 +354,7 @@
                                 <form onSubmit={handleFormSubmit} className="space-y-4">
                                     <div>
                                         <label className="text-xs font-bold text-slate-500 block mb-1">業務名 (タイトル) <span className="text-red-500">*</span></label>
-                                        <input value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder="例: 令和X年度 就学援助のお知らせ配布" className="w-full p-3 border-2 border-slate-200 rounded-xl outline-none focus:border-emerald-500 font-bold" required />
+                                        <input value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder="例: 病休取得時の手続き" className="w-full p-3 border-2 border-slate-200 rounded-xl outline-none focus:border-emerald-500 font-bold" required />
                                     </div>
                                     
                                     <div className="flex flex-col sm:flex-row gap-4">
@@ -327,6 +378,28 @@
                                         </div>
                                     </div>
 
+                                    {/* ★ タグ選択ボタンエリア */}
+                                    <div className="p-4 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <label className="text-xs font-bold text-slate-500">🏷️ タグ (複数選択可・クリックで選択/解除)</label>
+                                            <button type="button" onClick={() => setShowTagModal(true)} className="text-xs font-bold text-emerald-600 hover:text-emerald-700 bg-white px-2 py-1 rounded border border-emerald-200 shadow-sm">⚙️ タグを編集</button>
+                                        </div>
+                                        <div className="flex flex-wrap gap-2">
+                                            {tagsMaster.map(tag => {
+                                                const isSelected = formData.selectedTags && formData.selectedTags.includes(tag);
+                                                return (
+                                                    <button 
+                                                        key={tag} type="button" 
+                                                        onClick={() => toggleTag(tag)}
+                                                        className={`px-3 py-1.5 rounded-full text-sm font-bold border transition-all ${isSelected ? 'bg-blue-500 text-white border-blue-600 shadow-md transform scale-105' : 'bg-white text-slate-500 border-slate-300 hover:bg-slate-100'}`}
+                                                    >
+                                                        {isSelected ? '✓ ' : ''}{tag}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+
                                     <div>
                                         <label className="text-xs font-bold text-slate-500 block mb-1">手順・コツ・注意点 (本文)</label>
                                         <textarea value={formData.content} onChange={e => setFormData({...formData, content: e.target.value})} placeholder="具体的なやり方や、去年ハマったポイントなどを自由に入力してください。" className="w-full p-3 border-2 border-slate-200 rounded-xl outline-none focus:border-emerald-500 font-medium h-48 resize-none leading-relaxed"></textarea>
@@ -335,11 +408,11 @@
                                     <div className="grid sm:grid-cols-2 gap-4">
                                         <div>
                                             <label className="text-xs font-bold text-slate-500 block mb-1">関係先・連絡先</label>
-                                            <input value={formData.stakeholders} onChange={e => setFormData({...formData, stakeholders: e.target.value})} placeholder="例: 教育委員会 学務課 (03-xxxx-xxxx)" className="w-full p-3 border-2 border-slate-200 rounded-xl outline-none focus:border-emerald-500 font-bold" />
+                                            <input value={formData.stakeholders} onChange={e => setFormData({...formData, stakeholders: e.target.value})} placeholder="例: 教育委員会 職員課" className="w-full p-3 border-2 border-slate-200 rounded-xl outline-none focus:border-emerald-500 font-bold" />
                                         </div>
                                         <div>
                                             <label className="text-xs font-bold text-slate-500 block mb-1">ファイル保管場所 (パスやURL)</label>
-                                            <input value={formData.fileLocation} onChange={e => setFormData({...formData, fileLocation: e.target.value})} placeholder="例: 共有フォルダ > 01_教務 > 就学援助" className="w-full p-3 border-2 border-slate-200 rounded-xl outline-none focus:border-emerald-500 font-bold text-emerald-600" />
+                                            <input value={formData.fileLocation} onChange={e => setFormData({...formData, fileLocation: e.target.value})} placeholder="例: 共有フォルダ > 04_人事" className="w-full p-3 border-2 border-slate-200 rounded-xl outline-none focus:border-emerald-500 font-bold text-emerald-600" />
                                         </div>
                                     </div>
 
@@ -348,7 +421,6 @@
                                             <input type="checkbox" checked={formData.needsAttention} onChange={e => setFormData({...formData, needsAttention: e.target.checked})} className="mr-3 w-5 h-5 accent-amber-500" />
                                             ⚠️ この業務は来年度ルール変更あり（または要確認）
                                         </label>
-                                        <p className="text-xs text-amber-600 ml-8 mt-1">チェックを入れると、一覧画面で目立つように表示されます。</p>
                                     </div>
 
                                     <div className="flex gap-3 pt-4 border-t mt-6">
@@ -362,7 +434,7 @@
                         </div>
                     )}
 
-                    {/* 分野管理モーダル */}
+                    {/* モーダル群 */}
                     {showCategoryModal && (
                         <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50">
                             <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
@@ -384,7 +456,6 @@
                         </div>
                     )}
 
-                    {/* 時期管理モーダル */}
                     {showTimingModal && (
                         <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50">
                             <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
@@ -402,6 +473,27 @@
                                     ))}
                                 </ul>
                                 <button onClick={() => setShowTimingModal(false)} className="w-full p-3 bg-slate-200 text-slate-700 rounded-xl font-bold">閉じる</button>
+                            </div>
+                        </div>
+                    )}
+
+                    {showTagModal && (
+                        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50">
+                            <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+                                <h3 className="font-black text-lg text-slate-800 mb-4">タグのカスタマイズ</h3>
+                                <div className="flex gap-2 mb-4">
+                                    <input value={newTagInput} onChange={e => setNewTagInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTag()} placeholder="新しいタグ" className="flex-1 p-2 border-2 border-slate-200 rounded-lg outline-none focus:border-emerald-500 font-bold" />
+                                    <button onClick={addTag} className="bg-emerald-600 text-white px-4 rounded-lg font-bold">追加</button>
+                                </div>
+                                <ul className="space-y-2 max-h-60 overflow-y-auto mb-6 pr-2">
+                                    {tagsMaster.map(t => (
+                                        <li key={t} className="flex justify-between items-center bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                            <span className="font-bold text-slate-700">{t}</span>
+                                            <button onClick={() => removeTag(t)} className="text-red-500 font-bold text-sm px-2">削除</button>
+                                        </li>
+                                    ))}
+                                </ul>
+                                <button onClick={() => setShowTagModal(false)} className="w-full p-3 bg-slate-200 text-slate-700 rounded-xl font-bold">閉じる</button>
                             </div>
                         </div>
                     )}
