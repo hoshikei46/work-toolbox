@@ -1,9 +1,10 @@
+
 <!DOCTYPE html>
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SmartStocker</title>
+    <title>SmartStocker 1.0</title>
     <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -32,6 +33,7 @@
         const { useState, useEffect, useMemo } = React;
 
         const defaultCategories = ['文具・事務用品', '印刷・OA消耗品', '郵送・行事用品', '日用・衛生・清掃', 'その他・PC周辺'];
+        const defaultVendors = ['アスクル', 'カウネット', 'スマートオフィス', 'たのめーる', '近所の文具店']; 
 
         function App() {
             const [groupId, setGroupId] = useState(localStorage.getItem('smartstocker_group') || '');
@@ -40,16 +42,18 @@
             
             const [categories, setCategories] = useState(defaultCategories);
             const [units, setUnits] = useState(['個', '箱', 'セット', '本']);
+            const [vendors, setVendors] = useState(defaultVendors); 
             const [errorMsg, setErrorMsg] = useState('');
             const [showAlertsOnly, setShowAlertsOnly] = useState(false);
 
-            // 設定用モーダル
             const [showUnitModal, setShowUnitModal] = useState(false);
             const [showCategoryModal, setShowCategoryModal] = useState(false);
+            const [showVendorModal, setShowVendorModal] = useState(false); 
+            
             const [newUnitInput, setNewUnitInput] = useState('');
             const [newCategoryInput, setNewCategoryInput] = useState('');
+            const [newVendorInput, setNewVendorInput] = useState(''); 
 
-            // ★ 物品の「登録/編集」統合モーダルの状態
             const [itemModal, setItemModal] = useState({ isOpen: false, mode: 'add', itemId: null });
             const [formData, setFormData] = useState({
                 name: '', category: defaultCategories[0], unit: '個', minStock: 3, vendor: '', orderCode: ''
@@ -72,8 +76,20 @@
                     if (docSnap.exists) setCategories(docSnap.data().list || defaultCategories);
                 });
 
-                return () => { unsubItems(); unsubUnits(); unsubCategories(); };
+                const unsubVendors = db.collection(`groups/${groupId}/settings`).doc('vendors').onSnapshot((docSnap) => {
+                    if (docSnap.exists) {
+                        setVendors(docSnap.data().list || defaultVendors);
+                    } else {
+                        db.collection(`groups/${groupId}/settings`).doc('vendors').set({ list: defaultVendors });
+                    }
+                });
+
+                return () => { unsubItems(); unsubUnits(); unsubCategories(); unsubVendors(); };
             }, [isLoggedIn, groupId]);
+
+            const sortedVendors = useMemo(() => {
+                return [...vendors].sort((a, b) => a.localeCompare(b, 'ja'));
+            }, [vendors]);
 
             const displayedItems = useMemo(() => {
                 let filtered = showAlertsOnly ? items.filter(item => item.currentStock <= item.minStock) : items;
@@ -100,7 +116,6 @@
                 });
             };
 
-            // ★ モーダルを開く処理（追加用・編集用）
             const openAddModal = () => {
                 setFormData({ name: '', category: categories[0] || defaultCategories[0], unit: units[0] || '個', minStock: 3, vendor: '', orderCode: '' });
                 setItemModal({ isOpen: true, mode: 'add', itemId: null });
@@ -114,7 +129,6 @@
                 setItemModal({ isOpen: true, mode: 'edit', itemId: item.id });
             };
 
-            // ★ フォーム送信処理（追加・更新を自動判定）
             const handleFormSubmit = (e) => {
                 e.preventDefault();
                 if (!formData.name || !formData.category || !formData.unit) return;
@@ -145,6 +159,7 @@
             const removeUnit = (u) => {
                 if(window.confirm(`「${u}」を削除しますか？`)) db.collection(`groups/${groupId}/settings`).doc('units').update({ list: units.filter(x => x !== u) });
             };
+
             const addCategory = () => {
                 const trimmed = newCategoryInput.trim();
                 if(trimmed) db.collection(`groups/${groupId}/settings`).doc('categories').update({ list: [...new Set([...categories, trimmed])] }).then(() => setNewCategoryInput(''));
@@ -153,11 +168,21 @@
                 if(window.confirm(`「${c}」を削除しますか？`)) db.collection(`groups/${groupId}/settings`).doc('categories').update({ list: categories.filter(x => x !== c) });
             };
 
+            const addVendor = () => {
+                const trimmed = newVendorInput.trim();
+                if(trimmed) db.collection(`groups/${groupId}/settings`).doc('vendors').update({ list: [...new Set([...vendors, trimmed])] }).then(() => setNewVendorInput(''));
+            };
+            const removeVendor = (v) => {
+                if(window.confirm(`業者「${v}」を削除しますか？\n※登録済みの物品の発注先は変更されません。`)) {
+                    db.collection(`groups/${groupId}/settings`).doc('vendors').update({ list: vendors.filter(x => x !== v) });
+                }
+            };
+
             if (!isLoggedIn) {
                 return (
                     <div className="flex items-center justify-center h-screen p-4">
                         <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-slate-100">
-                            <h1 className="text-3xl font-black text-indigo-600 mb-2 tracking-tight">SmartStocker</h1>
+                            <h1 className="text-3xl font-black text-indigo-600 mb-2 tracking-tight">SmartStocker 1.0</h1>
                             <p className="text-slate-500 mb-6 font-medium">職場IDを入力して開始してください</p>
                             <form onSubmit={handleLogin} className="space-y-4">
                                 <input name="groupInput" type="text" placeholder="例: office-01" className="w-full p-4 border-2 border-slate-200 rounded-xl focus:border-indigo-500 font-bold" required />
@@ -174,11 +199,10 @@
                 <div className="max-w-5xl mx-auto p-4 md:p-8 pb-32">
                     <header className="flex justify-between items-center mb-6 bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
                         <div>
-                            <h1 className="text-2xl font-black text-slate-800 tracking-tight">SmartStocker</h1>
+                            <h1 className="text-2xl font-black text-slate-800 tracking-tight">SmartStocker 1.0</h1>
                             <p className="text-sm font-bold text-indigo-500">接続先ID: {groupId}</p>
                         </div>
                         <div className="flex gap-2">
-                            {/* ★ PC用の上部「追加」ボタン */}
                             <button onClick={openAddModal} className="hidden sm:block bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-indigo-700 transition shadow-sm">+ 新規登録</button>
                             <button onClick={() => {localStorage.removeItem('smartstocker_group'); setIsLoggedIn(false);}} className="text-sm font-bold text-slate-400 hover:text-red-500 px-4 py-2 rounded-lg hover:bg-red-50">退出</button>
                         </div>
@@ -186,7 +210,6 @@
 
                     {errorMsg && <div className="bg-red-50 border-2 border-red-200 text-red-700 p-4 rounded-xl mb-6 font-bold">{errorMsg}</div>}
 
-                    {/* フィルタータブ */}
                     <div className="flex gap-2 mb-4 bg-slate-200 p-1 rounded-xl w-full sm:w-auto overflow-x-auto">
                         <button onClick={() => setShowAlertsOnly(false)} className={`flex-1 sm:flex-none px-6 py-2 rounded-lg font-bold text-sm transition ${!showAlertsOnly ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:bg-slate-300'}`}>
                             すべて表示 ({items.length})
@@ -196,7 +219,6 @@
                         </button>
                     </div>
 
-                    {/* 一覧表示（非常にスッキリしました） */}
                     <div className="flex flex-col gap-3">
                         {displayedItems.length === 0 && (
                             <p className="text-slate-500 font-bold text-center py-12 bg-white rounded-2xl border border-dashed border-slate-300">
@@ -219,7 +241,6 @@
                                     <div className="flex items-center text-xs font-bold text-slate-400 mb-1">
                                         アラート基準: <span className="text-slate-600 ml-1">{item.minStock} {item.unit}以下</span>
                                     </div>
-                                    {/* ★ 業者名・注文番号のコンパクト表示 */}
                                     {(item.vendor || item.orderCode) && (
                                         <div className="text-xs font-bold text-slate-500 bg-slate-100/50 p-2 rounded-lg inline-block">
                                             {item.vendor && <span className="mr-3">🏢 {item.vendor}</span>}
@@ -241,14 +262,10 @@
                         ))}
                     </div>
 
-                    {/* ★ スマホ用フローティングアクションボタン (FAB) */}
                     <button onClick={openAddModal} className="fixed bottom-6 right-6 w-16 h-16 bg-indigo-600 text-white rounded-full shadow-lg shadow-indigo-300 flex items-center justify-center text-3xl font-bold hover:bg-indigo-700 hover:scale-105 active:scale-95 transition z-30">
                         +
                     </button>
 
-                    {/* =========================================
-                        ★ 物品 登録/編集 統合モーダル (z-40)
-                    ========================================= */}
                     {itemModal.isOpen && (
                         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-40 overflow-y-auto">
                             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 my-8 relative">
@@ -257,7 +274,6 @@
                                 </h2>
                                 
                                 <form onSubmit={handleFormSubmit} className="space-y-4">
-                                    {/* 必須項目エリア */}
                                     <div className="space-y-4 p-4 bg-slate-50 rounded-xl border border-slate-100">
                                         <div>
                                             <label className="text-xs font-bold text-slate-500 block mb-1">物品名 <span className="text-red-500">*</span></label>
@@ -289,12 +305,17 @@
                                         </div>
                                     </div>
 
-                                    {/* ★ 追加情報（業者・注文番号）エリア */}
-                                    <div className="space-y-4 p-4 border-2 border-dashed border-slate-200 rounded-xl">
+                                    <div className="space-y-4 p-4 border-2 border-dashed border-slate-200 rounded-xl bg-white">
                                         <h3 className="text-sm font-bold text-slate-400">発注情報 (任意)</h3>
                                         <div>
                                             <label className="text-xs font-bold text-slate-500 block mb-1">業者名</label>
-                                            <input value={formData.vendor} onChange={e => setFormData({...formData, vendor: e.target.value})} placeholder="例: アスクル、たのめーる" className="w-full p-3 border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 font-bold" />
+                                            <div className="flex gap-1">
+                                                <select value={formData.vendor} onChange={e => setFormData({...formData, vendor: e.target.value})} className="w-full p-3 border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 font-bold bg-white">
+                                                    <option value="">指定なし</option>
+                                                    {sortedVendors.map(v => <option key={v} value={v}>{v}</option>)}
+                                                </select>
+                                                <button type="button" onClick={() => setShowVendorModal(true)} className="p-3 bg-slate-200 text-slate-600 rounded-xl hover:bg-slate-300 font-bold">⚙️</button>
+                                            </div>
                                         </div>
                                         <div>
                                             <label className="text-xs font-bold text-slate-500 block mb-1">注文番号 / 商品コード</label>
@@ -313,7 +334,6 @@
                         </div>
                     )}
 
-                    {/* 分野管理モーダル (z-50: 登録モーダルより上に表示) */}
                     {showCategoryModal && (
                         <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50">
                             <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
@@ -326,16 +346,15 @@
                                     {categories.map(c => (
                                         <li key={c} className="flex justify-between items-center bg-slate-50 p-3 rounded-lg border border-slate-200">
                                             <span className="font-bold text-slate-700">{c}</span>
-                                            <button onClick={() => removeCategory(c)} className="text-red-500 font-bold text-sm px-2">削除</button>
+                                            <button type="button" onClick={() => removeCategory(c)} className="text-red-500 font-bold text-sm px-2">削除</button>
                                         </li>
                                     ))}
                                 </ul>
-                                <button onClick={() => setShowCategoryModal(false)} className="w-full p-3 bg-slate-200 text-slate-700 rounded-xl font-bold">閉じる</button>
+                                <button type="button" onClick={() => setShowCategoryModal(false)} className="w-full p-3 bg-slate-200 text-slate-700 rounded-xl font-bold">閉じる</button>
                             </div>
                         </div>
                     )}
 
-                    {/* 単位管理モーダル (z-50) */}
                     {showUnitModal && (
                         <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50">
                             <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
@@ -348,14 +367,36 @@
                                     {units.map(u => (
                                         <li key={u} className="flex justify-between items-center bg-slate-50 p-3 rounded-lg border border-slate-200">
                                             <span className="font-bold text-slate-700">{u}</span>
-                                            <button onClick={() => removeUnit(u)} className="text-red-500 font-bold text-sm px-2">削除</button>
+                                            <button type="button" onClick={() => removeUnit(u)} className="text-red-500 font-bold text-sm px-2">削除</button>
                                         </li>
                                     ))}
                                 </ul>
-                                <button onClick={() => setShowUnitModal(false)} className="w-full p-3 bg-slate-200 text-slate-700 rounded-xl font-bold">閉じる</button>
+                                <button type="button" onClick={() => setShowUnitModal(false)} className="w-full p-3 bg-slate-200 text-slate-700 rounded-xl font-bold">閉じる</button>
                             </div>
                         </div>
                     )}
+
+                    {showVendorModal && (
+                        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50">
+                            <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+                                <h3 className="font-black text-lg text-slate-800 mb-4">業者のカスタマイズ</h3>
+                                <div className="flex gap-2 mb-4">
+                                    <input value={newVendorInput} onChange={e => setNewVendorInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addVendor()} placeholder="新しい業者名" className="flex-1 p-2 border-2 border-slate-200 rounded-lg outline-none focus:border-indigo-500 font-bold" />
+                                    <button onClick={addVendor} className="bg-indigo-600 text-white px-4 rounded-lg font-bold">追加</button>
+                                </div>
+                                <ul className="space-y-2 max-h-60 overflow-y-auto mb-6 pr-2">
+                                    {sortedVendors.map(v => (
+                                        <li key={v} className="flex justify-between items-center bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                            <span className="font-bold text-slate-700">{v}</span>
+                                            <button type="button" onClick={() => removeVendor(v)} className="text-red-500 font-bold text-sm px-2">削除</button>
+                                        </li>
+                                    ))}
+                                </ul>
+                                <button type="button" onClick={() => setShowVendorModal(false)} className="w-full p-3 bg-slate-200 text-slate-700 rounded-xl font-bold">閉じる</button>
+                            </div>
+                        </div>
+                    )}
+
                 </div>
             );
         }
