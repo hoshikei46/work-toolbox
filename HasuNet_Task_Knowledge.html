@@ -379,6 +379,45 @@
             return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
         };
 
+        function AILoadingOverlay() {
+            const [msgIndex, setMsgIndex] = useState(0);
+            const messages = [
+                { icon: "🤔", text: "ふむふむ、なるほど..." },
+                { icon: "🔍", text: "資料をすみずみまで確認中..." },
+                { icon: "📝", text: "分かりやすい言葉に翻訳しています..." },
+                { icon: "🏷️", text: "検索しやすいタグを考えています..." },
+                { icon: "🧹", text: "文章をきれいに整え中..." },
+                { icon: "💡", text: "いいタイトルが思いつきそうです！" },
+                { icon: "💦", text: "あと少しだけお待ちください！" }
+            ];
+
+            useEffect(() => {
+                const timer = setInterval(() => {
+                    setMsgIndex(prev => (prev + 1) % messages.length);
+                }, 2500);
+                return () => clearInterval(timer);
+            }, []);
+
+            return (
+                <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-[100] print-hidden backdrop-blur-sm">
+                    <div className="bg-white p-10 rounded-3xl shadow-2xl flex flex-col items-center max-w-sm w-full text-center">
+                        <div className="text-7xl mb-6 h-20 flex items-center justify-center">
+                            <div className="animate-bounce">{messages[msgIndex].icon}</div>
+                        </div>
+                        <h3 className="font-black text-xl text-slate-800 mb-4">AIが一生懸命考えています</h3>
+                        <p className="text-emerald-600 font-bold h-6 flex items-center justify-center">
+                            {messages[msgIndex].text}
+                        </p>
+                        <div className="mt-8 flex gap-3">
+                            <div className="w-3 h-3 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
+                            <div className="w-3 h-3 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '0.15s' }}></div>
+                            <div className="w-3 h-3 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '0.3s' }}></div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
         function AdminAiLimitSection({ cityId }) {
             const [limitInput, setLimitInput] = useState(150);
             const [limitSaved, setLimitSaved] = useState(false);
@@ -1219,6 +1258,9 @@
             const [filterTiming, setFilterTiming] = useState('');
             const [filterTag, setFilterTag] = useState(''); 
             const [filterAttentionOnly, setFilterAttentionOnly] = useState(false);
+            
+            // 👇 新規追加：ソート順のState
+            const [sortBy, setSortBy] = useState('updatedAtDesc');
 
             const [showCatModal, setShowCatModal] = useState(false);
             const [showTimeModal, setShowTimeModal] = useState(false);
@@ -1513,26 +1555,30 @@
 
             const getDeleteKeyword = (title) => title.length >= 4 ? title.slice(0, 4) : title;
 
+            // 👇 新規追加：ソート処理の実装
             const displayedItems = [...knowledges.public, ...knowledges.school, ...knowledges.private]
                 .filter(i => (!filterAttentionOnly||i.needsAttention) && (!filterCategory||i.category===filterCategory) && (!filterTiming||i.timing===filterTiming) && (!filterTag||(Array.isArray(i.selectedTags)&&i.selectedTags.includes(filterTag))) && (!searchQuery||i.title?.includes(searchQuery)||toSafeString(i.content).includes(searchQuery)))
                 .sort((a, b) => {
-                    const idxA = categories.indexOf(a.category);
-                    const idxB = categories.indexOf(b.category);
-                    return (idxA !== -1 ? idxA : 999) - (idxB !== -1 ? idxB : 999);
+                    if (sortBy === 'updatedAtDesc') {
+                        const timeA = a.updatedAt?.seconds || a.createdAt?.seconds || 0;
+                        const timeB = b.updatedAt?.seconds || b.createdAt?.seconds || 0;
+                        return timeB - timeA;
+                    } else if (sortBy === 'timing') {
+                        const idxA = timings.indexOf(a.timing);
+                        const idxB = timings.indexOf(b.timing);
+                        return (idxA !== -1 ? idxA : 999) - (idxB !== -1 ? idxB : 999);
+                    } else {
+                        // category
+                        const idxA = categories.indexOf(a.category);
+                        const idxB = categories.indexOf(b.category);
+                        return (idxA !== -1 ? idxA : 999) - (idxB !== -1 ? idxB : 999);
+                    }
                 });
 
             return (
                 <div className="space-y-6 pb-32 animate-fade-in max-w-5xl mx-auto relative">
                     
-                    {isAILoading && !itemModal.isOpen && (
-                        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-[100] print-hidden">
-                            <div className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center">
-                                <div className="text-5xl animate-bounce mb-4">🤖</div>
-                                <h3 className="font-black text-xl text-slate-800 mb-2">AIが読み込んでいます...</h3>
-                                <p className="text-slate-500 font-medium">マニュアルを自動作成しています。しばらくお待ちください。</p>
-                            </div>
-                        </div>
-                    )}
+                    {isAILoading && <AILoadingOverlay />}
 
                     <div className="flex flex-col sm:flex-row justify-between items-center gap-4 print-hidden">
                         <div className="flex gap-2 w-full sm:w-auto">
@@ -1606,12 +1652,21 @@
                         </div>
                     </div>
 
+                    {/* 👇 新規追加：ソート順のプルダウンを配置 */}
                     <div className="bg-white p-4 rounded-3xl shadow-sm border flex flex-wrap gap-3 print-hidden">
                         <input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="🔍 検索" className="flex-1 p-3 border-2 rounded-xl font-bold bg-slate-50 min-w-[200px]" />
+                        
+                        <select value={sortBy} onChange={e=>setSortBy(e.target.value)} className="p-3 border-2 rounded-xl font-bold bg-slate-50 text-slate-700 cursor-pointer">
+                            <option value="updatedAtDesc">🔽 更新日が新しい順</option>
+                            <option value="category">📑 分野順</option>
+                            <option value="timing">📅 時期順</option>
+                        </select>
+
                         <select value={filterCategory} onChange={e=>setFilterCategory(e.target.value)} className="p-3 border-2 rounded-xl font-bold bg-slate-50"><option value="">全分野</option>{categories.map(c=><option key={c}>{c}</option>)}</select>
                         <select value={filterTiming} onChange={e=>setFilterTiming(e.target.value)} className="p-3 border-2 rounded-xl font-bold bg-slate-50"><option value="">全時期</option>{timings.map(t=><option key={t}>{t}</option>)}</select>
                         <select value={filterTag} onChange={e=>setFilterTag(e.target.value)} className="p-3 border-2 rounded-xl font-bold bg-slate-50"><option value="">全タグ</option>{tagsMaster.map(t=><option key={t}>{t}</option>)}</select>
                     </div>
+
                     <div className="flex items-center justify-between mt-3 print-hidden">
                         <label className="flex items-center cursor-pointer text-sm font-bold text-slate-600 bg-amber-50 px-4 py-2 rounded-xl border border-amber-200"><input type="checkbox" checked={filterAttentionOnly} onChange={(e) => setFilterAttentionOnly(e.target.checked)} className="mr-2 w-4 h-4 accent-amber-500" />⚠️ 要確認・変更あり のみ表示</label>
                         <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold border ${aiLimitReached ? 'bg-red-50 border-red-300 text-red-600' : aiNearLimit ? 'bg-amber-50 border-amber-300 text-amber-700' : 'bg-slate-100 border-slate-200 text-slate-500'}`}>
