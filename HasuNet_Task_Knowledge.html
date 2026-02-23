@@ -1026,11 +1026,11 @@
                 const fmtSubs    = v => (Array.isArray(v) && v.length > 0) ? v.join(' / ') : '(なし)';
                 const fmtRecur   = v => RECURRING_OPTIONS.find(o => o.value === v)?.label || v;
                 const fields = [
-                    { label: 'タスク名',     before: t.title || '',                                        after: title },
-                    { label: '公開範囲',     before: VIS_CONF[t.visibility||'public'].label,               after: VIS_CONF[vis].label },
-                    { label: '業務領域',     before: t.domain || '',                                       after: domain },
+                    { label: 'タスク名',     before: t.title || '',                                      after: title },
+                    { label: '公開範囲',     before: VIS_CONF[t.visibility||'public'].label,                after: VIS_CONF[vis].label },
+                    { label: '業務領域',     before: t.domain || '',                                     after: domain },
                     { label: '繰り返し',     before: fmtRecur(t.recurringType||(t.isRecurring?'monthly':'none')), after: fmtRecur(rType) },
-                    { label: '対象月',       before: fmtMonths(t.targetMonths),                            after: fmtMonths(tMonths) },
+                    { label: '対象月',       before: fmtMonths(t.targetMonths),                             after: fmtMonths(tMonths) },
                     { label: '時期',         before: fmtSlots(t.timingSlots?.map(s=>s.slice(-2))),         after: fmtSlots(tSlots) },
                     { label: 'タグ',         before: fmtTags(t.tags),                                      after: fmtTags(tags) },
                     { label: 'サブタスク',   before: fmtSubs(t.subtasks),                                  after: fmtSubs(sub) },
@@ -1978,6 +1978,110 @@
             );
         }
 
+        function UserPasswordChangeModal({ cityId, schoolId, userId, onClose }) {
+            const [currentPassword, setCurrentPassword] = useState('');
+            const [newPassword, setNewPassword] = useState('');
+            const [newPasswordConfirm, setNewPasswordConfirm] = useState('');
+            const [error, setError] = useState('');
+            const [loading, setLoading] = useState(false);
+            const [success, setSuccess] = useState(false);
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                setError('');
+
+                if (newPassword.length < 4) {
+                    setError('新しいパスワードは4文字以上にしてください。');
+                    return;
+                }
+                if (newPassword !== newPasswordConfirm) {
+                    setError('新しいパスワードが一致しません。');
+                    return;
+                }
+
+                setLoading(true);
+                try {
+                    const docRef = db.collection(`cities/${cityId}/schools/${schoolId}/users/${userId}/settings`).doc('auth');
+                    const doc = await docRef.get();
+
+                    if (!doc.exists) {
+                        setError('認証データが見つかりません。');
+                        setLoading(false);
+                        return;
+                    }
+
+                    const currentHash = await hashPassword(currentPassword);
+                    if (doc.data().passwordHash !== currentHash) {
+                        setError('現在のパスワードが違います。');
+                        setLoading(false);
+                        return;
+                    }
+
+                    const newHash = await hashPassword(newPassword);
+                    await docRef.update({
+                        passwordHash: newHash,
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+
+                    setSuccess(true);
+                    setTimeout(() => {
+                        onClose();
+                    }, 2000);
+
+                } catch (err) {
+                    setError('パスワードの変更に失敗しました。');
+                    console.error(err);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            return (
+                <div className="fixed inset-0 bg-slate-900/70 flex items-center justify-center p-4 z-[80] print-hidden">
+                    <div className="bg-white rounded-3xl w-full max-w-md p-8 border-t-8 border-emerald-500 shadow-2xl">
+                        <h2 className="text-xl font-black mb-1 flex items-center gap-2">🔑 パスワードの変更</h2>
+                        <p className="text-xs font-bold text-slate-500 mb-5">
+                            {userId} さんのパスワードを変更します
+                        </p>
+
+                        {success ? (
+                            <div className="py-10 text-center animate-fade-in">
+                                <div className="text-5xl mb-4">✅</div>
+                                <p className="font-black text-emerald-700 text-lg">変更しました</p>
+                                <p className="text-xs text-slate-500 font-bold mt-2">画面を閉じます...</p>
+                            </div>
+                        ) : (
+                            <form onSubmit={handleSubmit} className="space-y-4">
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 block mb-1">現在のパスワード</label>
+                                    <input type="password" value={currentPassword} onChange={e=>setCurrentPassword(e.target.value)} className="w-full p-3 border-2 rounded-xl font-bold outline-none focus:border-emerald-400 bg-slate-50" required autoFocus />
+                                </div>
+                                <div className="pt-2">
+                                    <label className="text-xs font-bold text-slate-500 block mb-1">新しいパスワード（4文字以上）</label>
+                                    <input type="password" value={newPassword} onChange={e=>setNewPassword(e.target.value)} className="w-full p-3 border-2 rounded-xl font-bold outline-none focus:border-emerald-400" required />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 block mb-1">新しいパスワード（確認）</label>
+                                    <input type="password" value={newPasswordConfirm} onChange={e=>setNewPasswordConfirm(e.target.value)} className="w-full p-3 border-2 rounded-xl font-bold outline-none focus:border-emerald-400" required />
+                                </div>
+
+                                {error && <p className="text-red-500 text-sm font-bold text-center">{error}</p>}
+
+                                <div className="flex gap-3 pt-4">
+                                    <button type="button" onClick={onClose} className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold text-slate-600 transition">
+                                        キャンセル
+                                    </button>
+                                    <button type="submit" disabled={loading} className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black transition disabled:opacity-50">
+                                        {loading ? '更新中...' : '変更を保存'}
+                                    </button>
+                                </div>
+                            </form>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
         function App() {
             const [cityId, setCityId] = useState(localStorage.getItem('hn_cityId') || '');
             const [schoolId, setSchoolId] = useState(localStorage.getItem('hn_schoolId') || '');
@@ -1986,6 +2090,7 @@
             const [printConfig, setPrintConfig] = useState(null);
             const [showApiModal, setShowApiModal] = useState(false);
             const [showAdminModal, setShowAdminModal] = useState(false);
+            const [showPasswordChangeModal, setShowPasswordChangeModal] = useState(false);
 
             useEffect(() => { if (printConfig) setTimeout(() => window.print(), 300); }, [printConfig]);
             useEffect(() => { const h = () => setPrintConfig(null); window.addEventListener('afterprint', h); return () => window.removeEventListener('afterprint', h); }, []);
@@ -2004,6 +2109,7 @@
                         <div className="flex justify-between items-end mb-6">
                             <div><h1 className="text-3xl font-black text-emerald-700">HasuNet_Task＆Knowledge</h1><p className="text-sm font-bold text-slate-500 mt-1">🏢 {cityId} / 🏫 {schoolId} / 👤 {userId}</p></div>
                             <div className="flex gap-2">
+                                <button onClick={() => setShowPasswordChangeModal(true)} className="text-sm font-bold text-emerald-600 bg-emerald-50 px-3 py-2 border border-emerald-200 rounded-lg shadow-sm">🔑 パスワード変更</button>
                                 <button onClick={() => setShowApiModal(true)} className="text-sm font-bold text-blue-600 bg-blue-50 px-3 py-2 border border-blue-200 rounded-lg shadow-sm">⚙️ AI設定</button>
                                 <button onClick={() => setShowAdminModal(true)} className="text-sm font-bold text-slate-600 bg-slate-50 px-3 py-2 border border-slate-200 rounded-lg shadow-sm">🔧 管理者</button>
                                 <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="text-sm font-bold text-slate-400 bg-white px-3 py-2 border rounded-lg shadow-sm">退出</button>
@@ -2017,6 +2123,7 @@
                     {activeTab === 'tasks' ? <TaskBoard cityId={cityId} schoolId={schoolId} userId={userId} onPrint={(data) => setPrintConfig({ type: 'task', data })} /> : <KnowledgeTab cityId={cityId} schoolId={schoolId} userId={userId} onPrint={(data) => setPrintConfig({ type: 'knowledge', data })} onPrintAll={(items) => setPrintConfig({ type: 'knowledge_all', items, exportDate: new Date().toLocaleDateString('ja-JP') })} />}
                     {showApiModal && <ApiKeyModal cityId={cityId} onClose={() => setShowApiModal(false)} />}
                     {showAdminModal && <AdminModal cityId={cityId} onClose={() => setShowAdminModal(false)} />}
+                    {showPasswordChangeModal && <UserPasswordChangeModal cityId={cityId} schoolId={schoolId} userId={userId} onClose={() => setShowPasswordChangeModal(false)} />}
                 </div>
             );
         }
