@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart PDF Organizer</title>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+
+  <style>
+    .sortable-ghost { opacity: 0.4; }
+    .sortable-drag { cursor: grabbing !important; }
+    .page-card { transition: box-shadow 0.2s; }
+    .page-card:hover { box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
+    #drop-overlay { transition: opacity 0.2s; pointer-events: none; }
+  </style>
+</head>
+<body class="bg-gray-100 text-gray-900 font-sans min-h-screen relative">
+
+  <header class="bg-white border-b sticky top-0 z-10 px-6 py-4 flex justify-between items-center shadow-sm">
+    <div class="flex items-center gap-2">
+      <div class="bg-blue-600 p-2 rounded-lg text-white">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+      </div>
+      <h1 class="text-xl font-bold tracking-tight">Smart PDF Organizer</h1>
+    </div>
+    <div class="flex gap-3">
+      <button onclick="exportPdf(true)" class="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-md hover:bg-gray-50 font-medium text-sm transition-colors">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+        印刷
+      </button>
+      <button onclick="exportPdf(false)" class="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium text-sm shadow-md transition-colors">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+        保存 (PDF結合)
+      </button>
+    </div>
+  </header>
+
+  <div class="bg-white border-b px-6 py-3 flex flex-wrap gap-6 items-center text-sm text-gray-600">
+    <div class="flex items-center gap-3">
+      <label class="font-semibold">ズーム:</label>
+      <input type="range" id="zoom-slider" min="120" max="400" value="180" class="w-32 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+    </div>
+
+    <div class="h-6 w-px bg-gray-300"></div>
+
+    <div class="flex items-center gap-4">
+      <label class="flex items-center gap-2 cursor-pointer font-semibold">
+        <input type="checkbox" id="page-num-toggle" class="w-4 h-4 text-blue-600 rounded">
+        ページ番号を付与
+      </label>
+      
+      <div id="page-num-settings" class="hidden flex flex-wrap items-center gap-3 bg-gray-50 px-4 py-1.5 rounded-md border border-gray-200">
+        <div class="flex items-center gap-1">
+          <input type="number" id="page-num-start" min="1" value="1" class="w-14 border border-gray-300 rounded p-1 text-center focus:ring-blue-500">
+          <span>ページ目から</span>
+        </div>
+        
+        <div class="h-4 w-px bg-gray-300 hidden sm:block"></div>
+        
+        <div class="flex items-center gap-1">
+          <span>位置:</span>
+          <select id="page-num-pos" class="bg-white border border-gray-300 text-sm rounded focus:ring-blue-500 p-1">
+            <option value="left">左下</option>
+            <option value="center" selected>中央下</option>
+            <option value="right">右下</option>
+          </select>
+        </div>
+
+        <div class="h-4 w-px bg-gray-300 hidden sm:block"></div>
+
+        <div class="flex items-center gap-1">
+          <span>下から:</span>
+          <input type="number" id="page-num-y" min="0" max="200" value="15" class="w-14 border border-gray-300 rounded p-1 text-center focus:ring-blue-500">
+          <span>mm</span>
+        </div>
+
+        <div class="h-4 w-px bg-gray-300 hidden sm:block"></div>
+
+        <div class="flex items-center gap-1">
+          <span>サイズ:</span>
+          <input type="number" id="page-num-size" min="8" max="72" value="12" class="w-14 border border-gray-300 rounded p-1 text-center focus:ring-blue-500">
+          <span>pt</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <main class="p-8">
+    <div id="empty-state" class="max-w-2xl mx-auto mt-20 border-2 border-dashed border-gray-300 rounded-2xl p-12 text-center bg-white shadow-inner transition-colors">
+      <div class="mx-auto w-16 h-16 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mb-4">
+        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+      </div>
+      <h2 class="text-xl font-semibold mb-2">PDFファイルをアップロード</h2>
+      <p class="text-gray-500 mb-6">スキャンしたファイルをここにドロップして整理を開始します。</p>
+      <input type="file" id="file-upload" multiple accept="application/pdf" class="hidden">
+      <label for="file-upload" class="inline-block px-8 py-3 bg-blue-600 text-white rounded-full font-bold cursor-pointer hover:bg-blue-700 shadow-lg transition-colors">
+        ファイルを選択する
+      </label>
+    </div>
+
+    <div id="pdf-grid" class="flex flex-wrap gap-6 hidden"></div>
+  </main>
+
+  <div id="drop-overlay" class="fixed inset-0 bg-blue-500/10 border-4 border-blue-500 border-dashed z-40 opacity-0 flex items-center justify-center">
+    <div class="bg-white px-8 py-4 rounded-full shadow-lg text-blue-600 font-bold text-lg flex items-center gap-2">
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+      ファイルをドロップして追加
+    </div>
+  </div>
+
+  <div id="loading-overlay" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden items-center justify-center z-50">
+    <div class="bg-white p-6 rounded-xl shadow-2xl flex flex-col items-center">
+      <svg class="animate-spin text-blue-600 mb-4" xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>
+      <p class="font-bold text-lg text-gray-800">処理中...</p>
+    </div>
+  </div>
+
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    let pageDataMap = new Map();
+    let currentZoom = 180;
+    
+    const fileUpload = document.getElementById('file-upload');
+    const emptyState = document.getElementById('empty-state');
+    const pdfGrid = document.getElementById('pdf-grid');
+    const loadingOverlay = document.getElementById('loading-overlay');
+    const dropOverlay = document.getElementById('drop-overlay');
+    const zoomSlider = document.getElementById('zoom-slider');
+    const pageNumToggle = document.getElementById('page-num-toggle');
+    const pageNumSettings = document.getElementById('page-num-settings');
+    const pageNumStart = document.getElementById('page-num-start');
+    const pageNumPos = document.getElementById('page-num-pos');
+    const pageNumSize = document.getElementById('page-num-size');
+    const pageNumY = document.getElementById('page-num-y');
+
+    new Sortable(pdfGrid, {
+      animation: 150,
+      ghostClass: 'sortable-ghost',
+      dragClass: 'sortable-drag',
+      delay: 100,
+      delayOnTouchOnly: true
+    });
+
+    fileUpload.addEventListener('change', (e) => { processFiles(e.target.files); });
+
+    let dragCounter = 0;
+    document.body.addEventListener('dragenter', (e) => {
+      e.preventDefault();
+      dragCounter++;
+      dropOverlay.classList.remove('opacity-0');
+    });
+    document.body.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      dragCounter--;
+      if (dragCounter === 0) dropOverlay.classList.add('opacity-0');
+    });
+    document.body.addEventListener('dragover', (e) => { e.preventDefault(); });
+    document.body.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dragCounter = 0;
+      dropOverlay.classList.add('opacity-0');
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        processFiles(e.dataTransfer.files);
+      }
+    });
+
+    zoomSlider.addEventListener('input', (e) => {
+      currentZoom = e.target.value;
+      document.querySelectorAll('.page-card').forEach(card => {
+        card.style.width = `${currentZoom}px`;
+      });
+    });
+
+    pageNumToggle.addEventListener('change', (e) => {
+      if(e.target.checked) {
+        pageNumSettings.classList.replace('hidden', 'flex');
+      } else {
+        pageNumSettings.classList.replace('flex', 'hidden');
+      }
+    });
+
+    async function processFiles(files) {
+      if (!files || files.length === 0) return;
+      const pdfFiles = Array.from(files).filter(file => file.type === 'application/pdf');
+      if (pdfFiles.length === 0) return alert('PDFファイルのみ対応しています。');
+
+      showLoading();
+      emptyState.classList.add('hidden');
+      pdfGrid.classList.remove('hidden');
+
+      for (const file of pdfFiles) {
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+          
+          for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const viewport = page.getViewport({ scale: 1.5 });
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
+            await page.render({ canvasContext: context, viewport }).promise;
+            
+            const pageId = `page-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            pageDataMap.set(pageId, {
+              originalFile: file, 
+              pageIndex: i - 1,
+              rotation: 0
+            });
+            createPageCard(pageId, canvas.toDataURL(), i);
+          }
+        } catch (error) {
+          console.error(error);
+          alert(`${file.name} の読み込みに失敗しました。`);
+        }
+      }
+      fileUpload.value = '';
+      hideLoading();
+    }
+
+    function createPageCard(id, imgData, originalPageNum) {
+      const card = document.createElement('div');
+      card.className = 'page-card relative group bg-white border rounded-lg overflow-hidden flex flex-col cursor-grab';
+      card.style.width = `${currentZoom}px`;
+      card.id = id;
+
+      card.innerHTML = `
+        <div class="p-1 bg-gray-50 border-b flex justify-between items-center text-xs font-bold text-gray-500 select-none">
+          <span>P. ${originalPageNum}</span>
+        </div>
+        <div class="relative flex-1 bg-gray-200 flex items-center justify-center overflow-hidden h-48">
+          <img src="${imgData}" class="max-w-full max-h-full shadow-sm transition-transform duration-200" id="img-${id}">
+        </div>
+        <div class="p-2 flex justify-around bg-white border-t">
+          <button onclick="rotatePage('${id}')" class="p-1.5 hover:bg-blue-100 text-blue-600 rounded-full transition-colors" title="右に90度回転">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"></path><path d="M21 13a9 9 0 1 1-3-7.7L21 8"></path></svg>
+          </button>
+          <button onclick="deletePage('${id}')" class="p-1.5 hover:bg-red-100 text-red-600 rounded-full transition-colors" title="ページ削除">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+          </button>
+        </div>
+      `;
+      pdfGrid.appendChild(card);
+    }
+
+    window.rotatePage = function(id) {
+      const data = pageDataMap.get(id);
+      data.rotation = (data.rotation + 90) % 360;
+      const img = document.getElementById(`img-${id}`);
+      const isSideways = data.rotation === 90 || data.rotation === 270;
+      
+      if (isSideways) {
+        img.style.transform = `rotate(${data.rotation}deg) scale(0.65)`;
+      } else {
+        img.style.transform = `rotate(${data.rotation}deg) scale(1)`;
+      }
+    };
+
+    window.deletePage = function(id) {
+      document.getElementById(id).remove();
+      pageDataMap.delete(id);
+      if (pdfGrid.children.length === 0) {
+        emptyState.classList.remove('hidden');
+        pdfGrid.classList.add('hidden');
+      }
+    };
+
+    window.exportPdf = async function(isPrint = false) {
+      const pageElements = Array.from(pdfGrid.children);
+      if (pageElements.length === 0) return alert('PDFページがありません。');
+
+      showLoading();
+      try {
+        const mergedPdf = await PDFLib.PDFDocument.create();
+        const font = await mergedPdf.embedFont(PDFLib.StandardFonts.Helvetica);
+        const totalPages = pageElements.length;
+        const loadedPdfs = new Map();
+
+        const startPageIndex = Math.max(0, parseInt(pageNumStart.value, 10) - 1);
+        const fontSize = parseInt(pageNumSize.value, 10) || 12;
+        const bottomMm = parseFloat(pageNumY.value) || 15;
+        // 1mm = 2.83465pt
+        const marginPt = bottomMm * 2.83465;
+
+        for (let i = 0; i < totalPages; i++) {
+          const id = pageElements[i].id;
+          const data = pageDataMap.get(id);
+          
+          let srcPdf = loadedPdfs.get(data.originalFile.name);
+          if (!srcPdf) {
+            const freshArrayBuffer = await data.originalFile.arrayBuffer();
+            srcPdf = await PDFLib.PDFDocument.load(freshArrayBuffer);
+            loadedPdfs.set(data.originalFile.name, srcPdf);
+          }
+          
+          // ★修正ポイント：Embed（埋め込み）を使わず、元ページをそのままコピーして使うことで「ゆがみ」を100%防止
+          const [copiedPage] = await mergedPdf.copyPages(srcPdf, [data.pageIndex]);
+          
+          // 元のPDFが持っている回転と、ユーザーが画面上で操作した回転を足し合わせる
+          const originalRot = copiedPage.getRotation() ? copiedPage.getRotation().angle : 0;
+          const totalRotation = (originalRot + data.rotation) % 360;
+          
+          copiedPage.setRotation(PDFLib.degrees(totalRotation));
+          mergedPdf.addPage(copiedPage);
+
+          if (pageNumToggle.checked && i >= startPageIndex) {
+            const currentNum = i - startPageIndex + 1;
+            const text = String(currentNum);
+            const textWidth = font.widthOfTextAtSize(text, fontSize);
+            
+            // ページの物理サイズ（回転する前のベースサイズ）を取得
+            const { width: W, height: H } = copiedPage.getSize();
+            
+            // 見た目上のサイズ（縦横）を計算
+            const isSideways = (totalRotation === 90 || totalRotation === 270);
+            const visualW = isSideways ? H : W;
+            
+            const align = pageNumPos.value;
+            let visualX;
+            
+            // 左端・右端からのマージンも、下からのマージンと同じ値に揃える
+            if (align === 'left') {
+              visualX = marginPt;
+            } else if (align === 'center') {
+              visualX = visualW / 2 - textWidth / 2;
+            } else if (align === 'right') {
+              visualX = visualW - marginPt - textWidth;
+            }
+            
+            const visualY = marginPt;
+            
+            // ★ページ自体が回転しているため、文字の方を「逆回転」させて正しい位置に打ち込む数学的計算
+            let drawX, drawY, drawRot;
+            if (totalRotation === 0) {
+              drawX = visualX;
+              drawY = visualY;
+              drawRot = 0;
+            } else if (totalRotation === 90) {
+              drawX = W - visualY;
+              drawY = visualX;
+              drawRot = 90; // 時計回りに90度回っている紙に対して、反時計回りに90度回して文字を打つ
+            } else if (totalRotation === 180) {
+              drawX = W - visualX;
+              drawY = H - visualY;
+              drawRot = 180;
+            } else if (totalRotation === 270) {
+              drawX = visualY;
+              drawY = H - visualX;
+              drawRot = 270;
+            }
+
+            copiedPage.drawText(text, {
+              x: drawX,
+              y: drawY,
+              size: fontSize,
+              font: font,
+              color: PDFLib.rgb(0, 0, 0),
+              rotate: PDFLib.degrees(drawRot)
+            });
+          }
+        }
+
+        const pdfBytes = await mergedPdf.save();
+        const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+        const url = URL.createObjectURL(blob);
+
+        if (isPrint) {
+          const iframe = document.createElement('iframe');
+          iframe.style.display = 'none';
+          iframe.src = url;
+          document.body.appendChild(iframe);
+          iframe.onload = () => { iframe.contentWindow.print(); };
+        } else {
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = "organized_document.pdf";
+          a.click();
+          URL.revokeObjectURL(url);
+        }
+      } catch (error) {
+        console.error(error);
+        alert('PDFの生成中にエラーが発生しました。\n詳細: ' + error.message);
+      }
+      hideLoading();
+    };
+
+    function showLoading() { loadingOverlay.classList.replace('hidden', 'flex'); }
+    function hideLoading() { loadingOverlay.classList.replace('flex', 'hidden'); }
+
+  </script>
+</body>
+</html>
