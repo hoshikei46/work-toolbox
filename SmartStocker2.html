@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>SmartStocker 1.5</title>
+    <title>SmartStocker 1.6</title>
     <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -13,6 +13,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body class="bg-blue-50 min-h-screen font-sans text-slate-800">
     <div id="root"></div>
@@ -96,10 +97,11 @@
             const [showVendorModal, setShowVendorModal] = useState(false); 
             
             const [newItemInput, setNewItemInput] = useState(''); 
+            const [isProcessing, setIsProcessing] = useState(false); // ★ 処理中フラグ
 
             const [itemModal, setItemModal] = useState({ isOpen: false, mode: 'add', itemId: null });
             const [formData, setFormData] = useState({
-                name: '', category: '', unit: '', defaultStock: 0, currentStock: 0, 
+                name: '', category: '', unit: '', currentStock: 0, 
                 orderThreshold: 0, barcode: '', selectedTags: [], vendor: '', itemCode: '' 
             });
 
@@ -130,7 +132,12 @@
 
             const displayedItems = useMemo(() => {
                 let filtered = items;
-                if (filterLowStock) filtered = filtered.filter(item => item.currentStock <= item.orderThreshold);
+                if (filterLowStock) {
+                    filtered = filtered.filter(item => {
+                        const threshold = item.orderThreshold !== undefined ? item.orderThreshold : (item.minStock !== undefined ? item.minStock : 0);
+                        return item.currentStock <= threshold;
+                    });
+                }
                 if (filterCategory) filtered = filtered.filter(item => item.category === filterCategory);
                 if (filterTag) filtered = filtered.filter(item => item.selectedTags && item.selectedTags.includes(filterTag));
                 if (searchQuery) {
@@ -175,19 +182,21 @@
             const openAddModal = () => {
                 setFormData({ 
                     name: '', category: categories[0] || '', unit: units[0] || '', 
-                    defaultStock: 0, currentStock: 0, orderThreshold: 0, 
+                    currentStock: 0, orderThreshold: 0, 
                     barcode: '', selectedTags: [], vendor: '', itemCode: '' 
                 });
                 setItemModal({ isOpen: true, mode: 'add', itemId: null });
             };
 
             const openEditModal = (item) => {
+                const savedThreshold = item.orderThreshold !== undefined ? item.orderThreshold : (item.minStock !== undefined ? item.minStock : 0);
                 setFormData({ 
                     ...item, 
                     selectedTags: item.selectedTags || [], 
                     barcode: item.barcode || '',
                     vendor: item.vendor || '',
-                    itemCode: item.itemCode || ''
+                    itemCode: item.itemCode || '',
+                    orderThreshold: savedThreshold
                 });
                 setItemModal({ isOpen: true, mode: 'edit', itemId: item.id });
             };
@@ -195,7 +204,12 @@
             const handleFormSubmit = (e) => {
                 e.preventDefault();
                 if (!formData.name || !formData.category || !formData.unit) return;
-                const payload = { ...formData, currentStock: Number(formData.currentStock), orderThreshold: Number(formData.orderThreshold) };
+                
+                const payload = { 
+                    ...formData, 
+                    currentStock: Number(formData.currentStock), 
+                    orderThreshold: Number(formData.orderThreshold) 
+                };
 
                 if (itemModal.mode === 'add') db.collection(`groups/${groupId}/items`).add(payload);
                 else db.collection(`groups/${groupId}/items`).doc(itemModal.itemId).update(payload);
@@ -248,15 +262,106 @@
                 setScanMode(null);
             };
 
+            // ★ Excelエクスポート機能
+            const handleExport = () => {
+                if (items.length === 0) {
+                    alert('出力するデータがありません。');
+                    return;
+                }
+                const exportData = items.map(item => ({
+                    'ID': item.id,
+                    '品名': item.name,
+                    '分野': item.category,
+                    '単位': item.unit,
+                    '現在の在庫数': item.currentStock,
+                    '発注アラート': item.orderThreshold !== undefined ? item.orderThreshold : (item.minStock || 0),
+                    '業者名': item.vendor || '',
+                    '商品コード': item.itemCode || '',
+                    'バーコード': item.barcode || '',
+                    'タグ': item.selectedTags ? item.selectedTags.join(', ') : ''
+                }));
+
+                const ws = XLSX.utils.json_to_sheet(exportData);
+                // セルの幅を見やすく調整
+                ws['!cols'] = [{ wch: 22 }, { wch: 25 }, { wch: 15 }, { wch: 8 }, { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 20 }];
+                
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "在庫データ");
+                XLSX.writeFile(wb, `SmartStocker_在庫データ_${new Date().toISOString().slice(0,10)}.xlsx`);
+            };
+
+            // ★ Excelインポート（上書き・新規登録）機能
+            const handleImport = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                setIsProcessing(true);
+                const reader = new FileReader();
+                reader.onload = async (evt) => {
+                    try {
+                        const data = new Uint8Array(evt.target.result);
+                        const wb = XLSX.read(data, { type: 'array' });
+                        const wsname = wb.SheetNames[0];
+                        const ws = wb.Sheets[wsname];
+                        const rows = XLSX.utils.sheet_to_json(ws);
+                        
+                        if (rows.length === 0) {
+                            alert("データが見つかりません。");
+                            setIsProcessing(false);
+                            return;
+                        }
+                        
+                        let countNew = 0;
+                        let countUpdate = 0;
+
+                        // Firestoreへの書き込みループ
+                        for (const row of rows) {
+                            if (!row['品名']) continue; // 品名が空の場合はスキップ
+                            
+                            const payload = {
+                                name: String(row['品名'] || '').trim(),
+                                category: String(row['分野'] || categories[0]),
+                                unit: String(row['単位'] || units[0]),
+                                currentStock: Number(row['現在の在庫数']) || 0,
+                                orderThreshold: Number(row['発注アラート']) || 0,
+                                vendor: row['業者名'] ? String(row['業者名']).trim() : '',
+                                itemCode: row['商品コード'] ? String(row['商品コード']).trim() : '',
+                                barcode: row['バーコード'] ? String(row['バーコード']).trim() : '',
+                                selectedTags: row['タグ'] ? String(row['タグ']).split(',').map(t=>t.trim()).filter(t=>t) : []
+                            };
+
+                            const docId = row['ID'];
+                            if (docId) {
+                                // IDがある場合は「上書き更新」
+                                await db.collection(`groups/${groupId}/items`).doc(String(docId).trim()).set(payload, { merge: true });
+                                countUpdate++;
+                            } else {
+                                // IDがない場合は「新規登録」
+                                await db.collection(`groups/${groupId}/items`).add(payload);
+                                countNew++;
+                            }
+                        }
+                        alert(`インポートが完了しました！\n✅ 新規登録: ${countNew}件\n🔄 更新(上書き): ${countUpdate}件`);
+                    } catch (err) {
+                        console.error(err);
+                        alert("エラーが発生しました。Excelファイルの形式が正しいか確認してください。");
+                    }
+                    setIsProcessing(false);
+                    e.target.value = ''; // 選択クリア
+                };
+                reader.readAsArrayBuffer(file);
+            };
+
             if (!isLoggedIn) {
                 return (
                     <div className="flex items-center justify-center h-screen p-4">
                         <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-xl w-full max-w-sm border border-blue-100">
                             <h1 className="text-2xl sm:text-3xl font-black text-blue-600 mb-2 tracking-tight">
-                                SmartStocker <span className="text-lg text-blue-400">1.5</span>
+                                SmartStocker <span className="text-lg text-blue-400">1.6</span>
                             </h1>
-                            <form onSubmit={handleLogin} className="space-y-4 mt-6">
-                                <input name="groupInput" type="text" placeholder="職場IDを入力" className="w-full p-3 border-2 border-slate-200 rounded-xl font-bold focus:border-blue-500 outline-none" required />
+                            <p className="text-slate-500 mb-6 font-medium text-sm">職場IDを入力して在庫管理を開く</p>
+                            <form onSubmit={handleLogin} className="space-y-4">
+                                <input name="groupInput" type="text" placeholder="例: office-01" className="w-full p-3 border-2 border-slate-200 rounded-xl font-bold focus:border-blue-500 outline-none" required />
                                 <button type="submit" className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700">入室する</button>
                             </form>
                         </div>
@@ -293,16 +398,33 @@
                 <div className="max-w-4xl mx-auto p-2 sm:p-6 pb-24">
                     {scanMode && <BarcodeScanner onScan={handleScan} onClose={() => setScanMode(null)} />}
 
-                    <header className="flex justify-between items-center mb-4 bg-white p-3 sm:p-4 rounded-xl shadow-sm border border-slate-100">
+                    {/* ★ ヘッダー周りを改修: ボタンが増えてもスマホで崩れないように折り返し対応 */}
+                    <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 bg-white p-3 sm:p-4 rounded-xl shadow-sm border border-slate-100 gap-3">
                         <div>
                             <h1 className="text-xl sm:text-2xl font-black text-blue-700 tracking-tight leading-none flex items-baseline gap-1">
-                                SmartStocker <span className="text-sm font-bold text-blue-400">1.5</span>
+                                SmartStocker <span className="text-sm font-bold text-blue-400">1.6</span>
                             </h1>
                             <p className="text-[10px] sm:text-xs font-bold text-blue-400 mt-1">ID: {groupId}</p>
                         </div>
-                        <div className="flex items-center gap-1.5 sm:gap-2">
-                            <button onClick={openAddModal} className="text-[10px] sm:text-xs font-bold bg-blue-600 text-white px-2 sm:px-3 py-1.5 rounded-lg hover:bg-blue-700 shadow-sm transition">＋ 新規登録</button>
-                            <button onClick={() => {localStorage.removeItem('smartstocker_group'); setIsLoggedIn(false);}} className="text-[10px] sm:text-xs font-bold text-slate-500 px-2 sm:px-3 py-1.5 bg-slate-100 rounded-lg border border-slate-200 hover:bg-slate-200 transition">退出</button>
+                        
+                        {/* ★ 各種アクションボタン群 */}
+                        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 w-full sm:w-auto justify-end">
+                            <button onClick={handleExport} disabled={isProcessing} className="text-[10px] sm:text-xs font-bold bg-green-600 text-white px-2.5 py-1.5 rounded-lg hover:bg-green-700 shadow-sm transition flex items-center gap-1">
+                                ⬇️ 出力
+                            </button>
+                            <label className={`text-[10px] sm:text-xs font-bold bg-green-600 text-white px-2.5 py-1.5 rounded-lg hover:bg-green-700 shadow-sm transition flex items-center gap-1 cursor-pointer m-0 ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                ⬆️ 取込
+                                <input type="file" accept=".xlsx, .xls, .csv" onChange={handleImport} className="hidden" disabled={isProcessing} />
+                            </label>
+                            
+                            <span className="w-px h-6 bg-slate-200 mx-1 hidden sm:block"></span>
+
+                            <button onClick={openAddModal} disabled={isProcessing} className="text-[10px] sm:text-xs font-bold bg-blue-600 text-white px-2.5 py-1.5 rounded-lg hover:bg-blue-700 shadow-sm transition">
+                                ＋ 新規
+                            </button>
+                            <button onClick={() => {localStorage.removeItem('smartstocker_group'); setIsLoggedIn(false);}} className="text-[10px] sm:text-xs font-bold text-slate-500 px-2.5 py-1.5 bg-slate-100 rounded-lg border border-slate-200 hover:bg-slate-200 transition">
+                                退出
+                            </button>
                         </div>
                     </header>
 
@@ -310,7 +432,7 @@
                         <div className="flex flex-col sm:flex-row gap-2">
                             <div className="flex-1 relative flex">
                                 <span className="absolute left-3 top-2.5 text-slate-400 text-sm">🔍</span>
-                                <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="品名・バーコード" className="w-full pl-8 p-2 border-2 border-slate-200 rounded-l-xl text-sm font-bold outline-none focus:border-blue-500" />
+                                <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="品名・バーコード・コード" className="w-full pl-8 p-2 border-2 border-slate-200 rounded-l-xl text-sm font-bold outline-none focus:border-blue-500" />
                                 <button onClick={() => setScanMode('search')} className="bg-blue-600 text-white px-3 rounded-r-xl font-bold flex items-center gap-1 hover:bg-blue-700 transition">
                                     📷 <span className="hidden sm:inline text-xs">スキャン</span>
                                 </button>
@@ -338,13 +460,14 @@
                         </div>
                     </div>
 
-                    {/* アイテム一覧 */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
                         {displayedItems.length === 0 && (
                             <div className="col-span-full text-center py-10 text-slate-400 font-bold text-sm">表示するアイテムがありません。</div>
                         )}
                         {displayedItems.map(item => {
-                            const isLowStock = item.currentStock <= item.orderThreshold;
+                            const threshold = item.orderThreshold !== undefined ? item.orderThreshold : (item.minStock !== undefined ? item.minStock : 0);
+                            const isLowStock = item.currentStock <= threshold;
+                            
                             return (
                                 <div key={item.id} className={`p-3 sm:p-4 rounded-xl border-2 flex flex-col justify-between ${isLowStock ? 'bg-red-50/50 border-red-200 shadow-sm' : 'bg-white border-slate-100'}`}>
                                     <div>
@@ -360,7 +483,6 @@
                                             <button onClick={() => openEditModal(item)} className="absolute right-0 top-0 text-slate-300 hover:text-blue-500 text-sm">✏️</button>
                                         </h3>
                                         
-                                        {/* ★ 発注情報のサイズ調整と1行表示化 */}
                                         {(item.vendor || item.itemCode) && (
                                             <div className="mt-2 text-xs sm:text-sm bg-amber-50 p-1.5 sm:p-2 rounded-lg border border-amber-200 flex items-center flex-wrap gap-2 sm:gap-3">
                                                 {item.vendor && <span className="font-bold text-amber-900">🏢 {item.vendor}</span>}
