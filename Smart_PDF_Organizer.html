@@ -1,398 +1,649 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Smart PDF Organizer</title>
-  
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
-
-  <style>
-    .sortable-ghost { opacity: 0.4; }
-    .sortable-drag { cursor: grabbing !important; }
-    .page-card { transition: box-shadow 0.2s; }
-    .page-card:hover { box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
-    #drop-overlay { transition: opacity 0.2s; pointer-events: none; }
-  </style>
-</head>
-<body class="bg-gray-100 text-gray-900 font-sans min-h-screen relative">
-
-  <header class="bg-white border-b sticky top-0 z-10 px-6 py-4 flex justify-between items-center shadow-sm">
-    <div class="flex items-center gap-2">
-      <div class="bg-blue-600 p-2 rounded-lg text-white">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
-      </div>
-      <h1 class="text-xl font-bold tracking-tight">Smart PDF Organizer</h1>
-    </div>
-    <div class="flex gap-3">
-      <button onclick="exportPdf(true)" class="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-md hover:bg-gray-50 font-medium text-sm transition-colors">
-        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
-        印刷
-      </button>
-      <button onclick="exportPdf(false)" class="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium text-sm shadow-md transition-colors">
-        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-        保存 (PDF結合)
-      </button>
-    </div>
-  </header>
-
-  <div class="bg-white border-b px-6 py-3 flex flex-wrap gap-6 items-center text-sm text-gray-600">
-    <div class="flex items-center gap-3">
-      <label class="font-semibold">ズーム:</label>
-      <input type="range" id="zoom-slider" min="120" max="400" value="180" class="w-32 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
-    </div>
-
-    <div class="h-6 w-px bg-gray-300"></div>
-
-    <div class="flex items-center gap-4">
-      <label class="flex items-center gap-2 cursor-pointer font-semibold">
-        <input type="checkbox" id="page-num-toggle" class="w-4 h-4 text-blue-600 rounded">
-        ページ番号を付与
-      </label>
-      
-      <div id="page-num-settings" class="hidden flex flex-wrap items-center gap-3 bg-gray-50 px-4 py-1.5 rounded-md border border-gray-200">
-        <div class="flex items-center gap-1">
-          <input type="number" id="page-num-start" min="1" value="1" class="w-14 border border-gray-300 rounded p-1 text-center focus:ring-blue-500">
-          <span>ページ目から</span>
-        </div>
-        
-        <div class="h-4 w-px bg-gray-300 hidden sm:block"></div>
-        
-        <div class="flex items-center gap-1">
-          <span>位置:</span>
-          <select id="page-num-pos" class="bg-white border border-gray-300 text-sm rounded focus:ring-blue-500 p-1">
-            <option value="left">左下</option>
-            <option value="center" selected>中央下</option>
-            <option value="right">右下</option>
-          </select>
-        </div>
-
-        <div class="h-4 w-px bg-gray-300 hidden sm:block"></div>
-
-        <div class="flex items-center gap-1">
-          <span>下から:</span>
-          <input type="number" id="page-num-y" min="0" max="200" value="15" class="w-14 border border-gray-300 rounded p-1 text-center focus:ring-blue-500">
-          <span>mm</span>
-        </div>
-
-        <div class="h-4 w-px bg-gray-300 hidden sm:block"></div>
-
-        <div class="flex items-center gap-1">
-          <span>サイズ:</span>
-          <input type="number" id="page-num-size" min="8" max="72" value="12" class="w-14 border border-gray-300 rounded p-1 text-center focus:ring-blue-500">
-          <span>pt</span>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <main class="p-8">
-    <div id="empty-state" class="max-w-2xl mx-auto mt-20 border-2 border-dashed border-gray-300 rounded-2xl p-12 text-center bg-white shadow-inner transition-colors">
-      <div class="mx-auto w-16 h-16 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mb-4">
-        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
-      </div>
-      <h2 class="text-xl font-semibold mb-2">PDFファイルをアップロード</h2>
-      <p class="text-gray-500 mb-6">スキャンしたファイルをここにドロップして整理を開始します。</p>
-      <input type="file" id="file-upload" multiple accept="application/pdf" class="hidden">
-      <label for="file-upload" class="inline-block px-8 py-3 bg-blue-600 text-white rounded-full font-bold cursor-pointer hover:bg-blue-700 shadow-lg transition-colors">
-        ファイルを選択する
-      </label>
-    </div>
-
-    <div id="pdf-grid" class="flex flex-wrap gap-6 hidden"></div>
-  </main>
-
-  <div id="drop-overlay" class="fixed inset-0 bg-blue-500/10 border-4 border-blue-500 border-dashed z-40 opacity-0 flex items-center justify-center">
-    <div class="bg-white px-8 py-4 rounded-full shadow-lg text-blue-600 font-bold text-lg flex items-center gap-2">
-      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-      ファイルをドロップして追加
-    </div>
-  </div>
-
-  <div id="loading-overlay" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden items-center justify-center z-50">
-    <div class="bg-white p-6 rounded-xl shadow-2xl flex flex-col items-center">
-      <svg class="animate-spin text-blue-600 mb-4" xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>
-      <p class="font-bold text-lg text-gray-800">処理中...</p>
-    </div>
-  </div>
-
-  <script>
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
-    let pageDataMap = new Map();
-    let currentZoom = 180;
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart PDF Organizer & Editor</title>
     
-    const fileUpload = document.getElementById('file-upload');
-    const emptyState = document.getElementById('empty-state');
-    const pdfGrid = document.getElementById('pdf-grid');
-    const loadingOverlay = document.getElementById('loading-overlay');
-    const dropOverlay = document.getElementById('drop-overlay');
-    const zoomSlider = document.getElementById('zoom-slider');
-    const pageNumToggle = document.getElementById('page-num-toggle');
-    const pageNumSettings = document.getElementById('page-num-settings');
-    const pageNumStart = document.getElementById('page-num-start');
-    const pageNumPos = document.getElementById('page-num-pos');
-    const pageNumSize = document.getElementById('page-num-size');
-    const pageNumY = document.getElementById('page-num-y');
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';</script>
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
 
-    new Sortable(pdfGrid, {
-      animation: 150,
-      ghostClass: 'sortable-ghost',
-      dragClass: 'sortable-drag',
-      delay: 100,
-      delayOnTouchOnly: true
-    });
+    <style>
+        body { font-family: 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif; background-color: #f3f4f6; }
+        .sortable-ghost { opacity: 0.4; background-color: #e5e7eb; }
+        .sortable-drag { cursor: grabbing !important; }
+        .canvas-container { position: relative; display: inline-block; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1); border-radius: 0.5rem; overflow: hidden; }
+        
+        .annotation-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: crosshair; }
+        .annotation-item { position: absolute; transform: translate(-50%, -50%); display: flex; align-items: center; justify-content: center; }
+        .drag-handle { cursor: grab; padding: 0.5rem; border: 1px solid transparent; border-radius: 0.25rem; transition: border-color 0.2s; }
+        .drag-handle:hover { border-color: #d1d5db; background-color: rgba(255,255,255,0.5); }
+        .drag-handle:active { cursor: grabbing; }
+        
+        .signature-canvas { border: 2px dashed #fb923c; background: white; border-radius: 1rem; cursor: crosshair; touch-action: none; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
 
-    fileUpload.addEventListener('change', (e) => { processFiles(e.target.files); });
+    <script type="text/babel">
+        const { useState, useRef, useEffect } = React;
+        const { PDFDocument, rgb, degrees, StandardFonts } = PDFLib;
 
-    let dragCounter = 0;
-    document.body.addEventListener('dragenter', (e) => {
-      e.preventDefault();
-      dragCounter++;
-      dropOverlay.classList.remove('opacity-0');
-    });
-    document.body.addEventListener('dragleave', (e) => {
-      e.preventDefault();
-      dragCounter--;
-      if (dragCounter === 0) dropOverlay.classList.add('opacity-0');
-    });
-    document.body.addEventListener('dragover', (e) => { e.preventDefault(); });
-    document.body.addEventListener('drop', (e) => {
-      e.preventDefault();
-      dragCounter = 0;
-      dropOverlay.classList.add('opacity-0');
-      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-        processFiles(e.dataTransfer.files);
-      }
-    });
+        const IconEdit = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>;
+        const IconRotate = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2v6h-6"/><path d="M21 13a9 9 0 1 1-3-7.7L21 8"/></svg>;
+        const IconDelete = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>;
 
-    zoomSlider.addEventListener('input', (e) => {
-      currentZoom = e.target.value;
-      document.querySelectorAll('.page-card').forEach(card => {
-        card.style.width = `${currentZoom}px`;
-      });
-    });
-
-    pageNumToggle.addEventListener('change', (e) => {
-      if(e.target.checked) {
-        pageNumSettings.classList.replace('hidden', 'flex');
-      } else {
-        pageNumSettings.classList.replace('flex', 'hidden');
-      }
-    });
-
-    async function processFiles(files) {
-      if (!files || files.length === 0) return;
-      const pdfFiles = Array.from(files).filter(file => file.type === 'application/pdf');
-      if (pdfFiles.length === 0) return alert('PDFファイルのみ対応しています。');
-
-      showLoading();
-      emptyState.classList.add('hidden');
-      pdfGrid.classList.remove('hidden');
-
-      for (const file of pdfFiles) {
-        try {
-          const arrayBuffer = await file.arrayBuffer();
-          const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-          
-          for (let i = 1; i <= pdf.numPages; i++) {
-            const page = await pdf.getPage(i);
-            const viewport = page.getViewport({ scale: 1.5 });
-            const canvas = document.createElement('canvas');
-            const context = canvas.getContext('2d');
-            canvas.height = viewport.height;
-            canvas.width = viewport.width;
-            await page.render({ canvasContext: context, viewport }).promise;
+        function App() {
+            const [pages, setPages] = useState([]);
+            const [isLoading, setIsLoading] = useState(false);
+            const [zoom, setZoom] = useState(180);
             
-            const pageId = `page-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-            pageDataMap.set(pageId, {
-              originalFile: file, 
-              pageIndex: i - 1,
-              rotation: 0
-            });
-            createPageCard(pageId, canvas.toDataURL(), i);
-          }
-        } catch (error) {
-          console.error(error);
-          alert(`${file.name} の読み込みに失敗しました。`);
+            const [addPageNums, setAddPageNums] = useState(false);
+            const [pageNumConfig, setPageNumConfig] = useState({ start: 1, pos: 'center', y: 15, size: 12, font: 'Helvetica' });
+            const [editingPageId, setEditingPageId] = useState(null);
+            
+            const fileCache = useRef(new Map());
+            const gridRef = useRef(null);
+            const sortableInstance = useRef(null);
+
+            useEffect(() => {
+                if (gridRef.current && pages.length > 0) {
+                    if (sortableInstance.current) sortableInstance.current.destroy();
+                    sortableInstance.current = Sortable.create(gridRef.current, {
+                        animation: 150,
+                        ghostClass: 'sortable-ghost',
+                        onEnd: (evt) => {
+                            setPages((prevPages) => {
+                                const newArray = [...prevPages];
+                                const [movedItem] = newArray.splice(evt.oldIndex, 1);
+                                newArray.splice(evt.newIndex, 0, movedItem);
+                                return newArray;
+                            });
+                        }
+                    });
+                }
+            }, [pages.length]);
+
+            const handleFileUpload = async (e) => {
+                const files = e.target.files || e.dataTransfer.files;
+                if (!files || files.length === 0) return;
+                
+                const pdfFiles = Array.from(files).filter(file => file.type === 'application/pdf');
+                if (pdfFiles.length === 0) return alert('PDFファイルのみ対応しています。');
+
+                setIsLoading(true);
+                const newPages = [];
+
+                for (const file of pdfFiles) {
+                    try {
+                        const arrayBuffer = await file.arrayBuffer();
+                        const fileId = `${file.name}-${Date.now()}`;
+                        fileCache.current.set(fileId, arrayBuffer);
+
+                        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer.slice(0) }).promise;
+                        for (let i = 1; i <= pdf.numPages; i++) {
+                            const page = await pdf.getPage(i);
+                            const viewport = page.getViewport({ scale: 1.5 });
+                            const canvas = document.createElement('canvas');
+                            const context = canvas.getContext('2d');
+                            canvas.height = viewport.height;
+                            canvas.width = viewport.width;
+                            await page.render({ canvasContext: context, viewport }).promise;
+                            
+                            newPages.push({
+                                id: `page-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                                fileId: fileId, pageIndex: i - 1, originalPageNum: i, rotation: 0,
+                                previewUrl: canvas.toDataURL('image/jpeg', 0.8),
+                                dimensions: { width: viewport.width, height: viewport.height },
+                                annotations: []
+                            });
+                        }
+                    } catch (error) {
+                        console.error(error);
+                        alert(`${file.name} の読み込みに失敗しました。`);
+                    }
+                }
+                setPages(prev => [...prev, ...newPages]);
+                setIsLoading(false);
+                if (e.target.value) e.target.value = '';
+            };
+
+            const rotatePage = (id) => setPages(pages.map(p => p.id === id ? { ...p, rotation: (p.rotation + 90) % 360 } : p));
+            const deletePage = (id) => setPages(pages.filter(p => p.id !== id));
+            const saveAnnotations = (id, newAnnotations) => {
+                setPages(pages.map(p => p.id === id ? { ...p, annotations: newAnnotations } : p));
+                setEditingPageId(null);
+            };
+
+            const textToImage = (text, color, size, font, scaleFactor = 4) => {
+                const tempCanvas = document.createElement('canvas');
+                const ctx = tempCanvas.getContext('2d');
+                ctx.font = `${size}px ${font}`;
+                const textMetrics = ctx.measureText(text);
+                tempCanvas.width = (textMetrics.width + 10) * scaleFactor; 
+                tempCanvas.height = (size + 10) * scaleFactor;
+                ctx.scale(scaleFactor, scaleFactor);
+                ctx.font = `${size}px ${font}`; 
+                ctx.fillStyle = color; 
+                ctx.textBaseline = 'top';
+                ctx.fillText(text, 5, 5);
+                return tempCanvas.toDataURL('image/png');
+            };
+
+            const exportPdf = async () => {
+                if (pages.length === 0) return;
+                setIsLoading(true);
+                try {
+                    const mergedPdf = await PDFDocument.create();
+                    const loadedPdfs = new Map();
+                    const startPageIndex = Math.max(0, parseInt(pageNumConfig.start, 10) - 1);
+                    const marginPt = parseFloat(pageNumConfig.y) * 2.83465;
+
+                    let pageNumFont;
+                    if (pageNumConfig.font === 'TimesRoman') pageNumFont = await mergedPdf.embedFont(StandardFonts.TimesRoman);
+                    else if (pageNumConfig.font === 'Courier') pageNumFont = await mergedPdf.embedFont(StandardFonts.Courier);
+                    else pageNumFont = await mergedPdf.embedFont(StandardFonts.Helvetica);
+
+                    for (let i = 0; i < pages.length; i++) {
+                        const pageData = pages[i];
+                        let srcPdf = loadedPdfs.get(pageData.fileId);
+                        if (!srcPdf) {
+                            const arrayBuffer = fileCache.current.get(pageData.fileId);
+                            if (!arrayBuffer) throw new Error("メモリからファイルデータが失われました。再度アップロードしてください。");
+                            const bufferCopy = arrayBuffer.slice(0);
+                            srcPdf = await PDFDocument.load(bufferCopy);
+                            loadedPdfs.set(pageData.fileId, srcPdf);
+                        }
+
+                        const [copiedPage] = await mergedPdf.copyPages(srcPdf, [pageData.pageIndex]);
+                        const totalRotation = ((copiedPage.getRotation()?.angle || 0) + pageData.rotation) % 360;
+                        copiedPage.setRotation(degrees(totalRotation));
+                        mergedPdf.addPage(copiedPage);
+
+                        const { width, height } = copiedPage.getSize();
+                        const scaleX = width / pageData.dimensions.width;
+                        const scaleY = height / pageData.dimensions.height;
+
+                        for (const ann of pageData.annotations) {
+                            const pdfX = ann.x * scaleX; const pdfY = height - (ann.y * scaleY);
+                            if (ann.type === 'text') {
+                                const scaleFactor = 4;
+                                const imgDataUrl = textToImage(ann.text, ann.color, ann.size * scaleY, ann.fontFamily || 'sans-serif', scaleFactor);
+                                const imgBytes = await fetch(imgDataUrl).then(res => res.arrayBuffer());
+                                const image = await mergedPdf.embedPng(imgBytes);
+                                const drawWidth = image.width / scaleFactor;
+                                const drawHeight = image.height / scaleFactor;
+                                copiedPage.drawImage(image, { x: pdfX - (drawWidth / 2), y: pdfY - (drawHeight / 2), width: drawWidth, height: drawHeight });
+                            } else if (ann.type === 'image') {
+                                const imgBytes = await fetch(ann.src).then(res => res.arrayBuffer());
+                                const image = await mergedPdf.embedPng(imgBytes); 
+                                copiedPage.drawImage(image, { x: pdfX - ((ann.width * scaleX) / 2), y: pdfY - ((ann.height * scaleY) / 2), width: ann.width * scaleX, height: ann.height * scaleY });
+                            }
+                        }
+
+                        if (addPageNums && i >= startPageIndex) {
+                            const currentNum = i - startPageIndex + 1;
+                            const text = String(currentNum);
+                            const textWidth = pageNumFont.widthOfTextAtSize(text, parseInt(pageNumConfig.size, 10));
+                            const isSideways = (totalRotation === 90 || totalRotation === 270);
+                            const visualW = isSideways ? height : width;
+                            let visualX;
+                            if (pageNumConfig.pos === 'left') visualX = marginPt;
+                            else if (pageNumConfig.pos === 'center') visualX = visualW / 2 - textWidth / 2;
+                            else if (pageNumConfig.pos === 'right') visualX = visualW - marginPt - textWidth;
+                            
+                            let drawX, drawY, drawRot;
+                            if (totalRotation === 0) { drawX = visualX; drawY = marginPt; drawRot = 0; }
+                            else if (totalRotation === 90) { drawX = width - marginPt; drawY = visualX; drawRot = 90; }
+                            else if (totalRotation === 180) { drawX = width - visualX; drawY = height - marginPt; drawRot = 180; }
+                            else if (totalRotation === 270) { drawX = marginPt; drawY = height - visualX; drawRot = 270; }
+
+                            copiedPage.drawText(text, { x: drawX, y: drawY, size: parseInt(pageNumConfig.size, 10), font: pageNumFont, color: rgb(0, 0, 0), rotate: degrees(drawRot) });
+                        }
+                    }
+
+                    const pdfBytesOutput = await mergedPdf.save();
+                    const blob = new Blob([pdfBytesOutput], { type: 'application/pdf' });
+                    const url = URL.createObjectURL(blob);
+
+                    const link = document.createElement('a'); 
+                    link.href = url; 
+                    link.download = 'organized_document.pdf'; 
+                    link.click(); 
+                    URL.revokeObjectURL(url);
+
+                } catch (error) {
+                    console.error(error); alert('PDFの生成中にエラーが発生しました。\n詳細: ' + error.message);
+                }
+                setIsLoading(false);
+            };
+
+            const handleDragOver = (e) => e.preventDefault();
+            const handleDrop = (e) => { e.preventDefault(); handleFileUpload({ target: { files: e.dataTransfer.files } }); };
+
+            return (
+                <div className="flex flex-col min-h-screen" onDragOver={handleDragOver} onDrop={handleDrop}>
+                    <header className="bg-white border-b sticky top-0 z-10 px-6 py-4 flex justify-between items-center shadow-sm">
+                        <div className="flex items-center gap-2">
+                            <div className="bg-blue-600 p-2 rounded-lg text-white font-bold">PDF</div>
+                            <h1 className="text-xl font-bold tracking-tight">Smart PDF Organizer & Editor</h1>
+                        </div>
+                        <div className="flex gap-3">
+                            <label className="cursor-pointer flex items-center gap-2 px-4 py-2 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200 font-medium text-sm transition-colors">
+                                ファイルを追加
+                                <input type="file" multiple accept="application/pdf" className="hidden" onChange={handleFileUpload} />
+                            </label>
+                            <button onClick={exportPdf} disabled={pages.length === 0} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 shadow-md transition-transform active:scale-95">
+                                保存 (PDF出力)
+                            </button>
+                        </div>
+                    </header>
+
+                    <div className="bg-white border-b px-6 py-3 flex flex-wrap gap-6 items-center text-sm text-gray-600">
+                        <div className="flex items-center gap-3">
+                            <label className="font-semibold">ズーム:</label>
+                            <input type="range" min="120" max="400" value={zoom} onChange={e => setZoom(e.target.value)} className="w-32" />
+                        </div>
+                        <div className="h-6 w-px bg-gray-300"></div>
+                        <div className="flex items-center gap-4">
+                            <label className="flex items-center gap-2 cursor-pointer font-semibold">
+                                <input type="checkbox" checked={addPageNums} onChange={e => setAddPageNums(e.target.checked)} className="w-4 h-4" />
+                                ページ番号を付与
+                            </label>
+                            {addPageNums && (
+                                <div className="flex flex-wrap gap-3 bg-gray-50 px-4 py-2 rounded-md border border-gray-200 items-center">
+                                    <div className="flex items-center gap-1">
+                                        <input type="number" value={pageNumConfig.start} onChange={e => setPageNumConfig({...pageNumConfig, start: e.target.value})} className="w-12 border rounded p-1 text-center" />
+                                        <span>ページ目から</span>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <span>位置:</span>
+                                        <select value={pageNumConfig.pos} onChange={e => setPageNumConfig({...pageNumConfig, pos: e.target.value})} className="border rounded p-1">
+                                            <option value="left">左下</option><option value="center">中央下</option><option value="right">右下</option>
+                                        </select>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <span>下から:</span>
+                                        <input type="number" value={pageNumConfig.y} onChange={e => setPageNumConfig({...pageNumConfig, y: e.target.value})} className="w-12 border rounded p-1 text-center" />
+                                        <span>mm</span>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <span>サイズ:</span>
+                                        <input type="number" value={pageNumConfig.size} onChange={e => setPageNumConfig({...pageNumConfig, size: e.target.value})} className="w-12 border rounded p-1 text-center" />
+                                        <span>pt</span>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <span>フォント:</span>
+                                        <select value={pageNumConfig.font} onChange={e => setPageNumConfig({...pageNumConfig, font: e.target.value})} className="border rounded p-1 w-24">
+                                            <option value="Helvetica">ゴシック体</option>
+                                            <option value="TimesRoman">明朝体</option>
+                                            <option value="Courier">等幅</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <main className="p-8 flex-1">
+                        {pages.length === 0 ? (
+                            <div className="max-w-2xl mx-auto mt-20 border-2 border-dashed border-gray-300 rounded-2xl p-12 text-center bg-white shadow-sm">
+                                <h2 className="text-xl font-semibold mb-2">PDFファイルをアップロード</h2>
+                                <p className="text-gray-500 mb-6">ファイルをここにドロップするか、ボタンから選択してください。</p>
+                                <label className="inline-block px-8 py-3 bg-blue-600 text-white rounded-full font-bold cursor-pointer hover:bg-blue-700 shadow-lg">
+                                    ファイルを選択する
+                                    <input type="file" multiple accept="application/pdf" className="hidden" onChange={handleFileUpload} />
+                                </label>
+                            </div>
+                        ) : (
+                            <div ref={gridRef} className="flex flex-wrap gap-6">
+                                {pages.map(page => {
+                                    const isSideways = page.rotation === 90 || page.rotation === 270;
+                                    return (
+                                        <div key={page.id} className="page-card relative bg-white border rounded-lg flex flex-col cursor-grab shadow-sm hover:shadow-md transition-shadow" style={{ width: `${zoom}px` }}>
+                                            <div className="p-1 bg-gray-50 border-b flex justify-between items-center text-xs font-bold text-gray-500">
+                                                <span>P. {page.originalPageNum}</span>
+                                                {page.annotations.length > 0 && <span className="text-orange-500">✍️ 追記あり</span>}
+                                            </div>
+                                            <div className="relative flex-1 bg-gray-200 flex items-center justify-center overflow-hidden h-48">
+                                                <img src={page.previewUrl} style={{ transform: `rotate(${page.rotation}deg) scale(${isSideways ? 0.65 : 1})` }} className="max-w-full max-h-full transition-transform duration-200 pointer-events-none" />
+                                            </div>
+                                            <div className="p-2 flex justify-between bg-white border-t">
+                                                <button onClick={() => setEditingPageId(page.id)} className="flex items-center gap-1 text-xs font-bold text-orange-600 hover:bg-orange-50 px-2 py-1 rounded">
+                                                    <IconEdit /> 編集
+                                                </button>
+                                                <div className="flex gap-1">
+                                                    <button onClick={() => rotatePage(page.id)} className="p-1 hover:bg-blue-100 text-blue-600 rounded"><IconRotate /></button>
+                                                    <button onClick={() => deletePage(page.id)} className="p-1 hover:bg-red-100 text-red-600 rounded"><IconDelete /></button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </main>
+
+                    {isLoading && (
+                        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+                            <div className="bg-white p-6 rounded-xl shadow-2xl flex flex-col items-center">
+                                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mb-4"></div>
+                                <p className="font-bold">処理中...</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {editingPageId && <EditorModal page={pages.find(p => p.id === editingPageId)} onClose={() => setEditingPageId(null)} onSave={saveAnnotations} />}
+                </div>
+            );
         }
-      }
-      fileUpload.value = '';
-      hideLoading();
-    }
 
-    function createPageCard(id, imgData, originalPageNum) {
-      const card = document.createElement('div');
-      card.className = 'page-card relative group bg-white border rounded-lg overflow-hidden flex flex-col cursor-grab';
-      card.style.width = `${currentZoom}px`;
-      card.id = id;
-
-      card.innerHTML = `
-        <div class="p-1 bg-gray-50 border-b flex justify-between items-center text-xs font-bold text-gray-500 select-none">
-          <span>P. ${originalPageNum}</span>
-        </div>
-        <div class="relative flex-1 bg-gray-200 flex items-center justify-center overflow-hidden h-48">
-          <img src="${imgData}" class="max-w-full max-h-full shadow-sm transition-transform duration-200" id="img-${id}">
-        </div>
-        <div class="p-2 flex justify-around bg-white border-t">
-          <button onclick="rotatePage('${id}')" class="p-1.5 hover:bg-blue-100 text-blue-600 rounded-full transition-colors" title="右に90度回転">
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"></path><path d="M21 13a9 9 0 1 1-3-7.7L21 8"></path></svg>
-          </button>
-          <button onclick="deletePage('${id}')" class="p-1.5 hover:bg-red-100 text-red-600 rounded-full transition-colors" title="ページ削除">
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-          </button>
-        </div>
-      `;
-      pdfGrid.appendChild(card);
-    }
-
-    window.rotatePage = function(id) {
-      const data = pageDataMap.get(id);
-      data.rotation = (data.rotation + 90) % 360;
-      const img = document.getElementById(`img-${id}`);
-      const isSideways = data.rotation === 90 || data.rotation === 270;
-      
-      if (isSideways) {
-        img.style.transform = `rotate(${data.rotation}deg) scale(0.65)`;
-      } else {
-        img.style.transform = `rotate(${data.rotation}deg) scale(1)`;
-      }
-    };
-
-    window.deletePage = function(id) {
-      document.getElementById(id).remove();
-      pageDataMap.delete(id);
-      if (pdfGrid.children.length === 0) {
-        emptyState.classList.remove('hidden');
-        pdfGrid.classList.add('hidden');
-      }
-    };
-
-    window.exportPdf = async function(isPrint = false) {
-      const pageElements = Array.from(pdfGrid.children);
-      if (pageElements.length === 0) return alert('PDFページがありません。');
-
-      showLoading();
-      try {
-        const mergedPdf = await PDFLib.PDFDocument.create();
-        const font = await mergedPdf.embedFont(PDFLib.StandardFonts.Helvetica);
-        const totalPages = pageElements.length;
-        const loadedPdfs = new Map();
-
-        const startPageIndex = Math.max(0, parseInt(pageNumStart.value, 10) - 1);
-        const fontSize = parseInt(pageNumSize.value, 10) || 12;
-        const bottomMm = parseFloat(pageNumY.value) || 15;
-        // 1mm = 2.83465pt
-        const marginPt = bottomMm * 2.83465;
-
-        for (let i = 0; i < totalPages; i++) {
-          const id = pageElements[i].id;
-          const data = pageDataMap.get(id);
-          
-          let srcPdf = loadedPdfs.get(data.originalFile.name);
-          if (!srcPdf) {
-            const freshArrayBuffer = await data.originalFile.arrayBuffer();
-            srcPdf = await PDFLib.PDFDocument.load(freshArrayBuffer);
-            loadedPdfs.set(data.originalFile.name, srcPdf);
-          }
-          
-          // ★修正ポイント：Embed（埋め込み）を使わず、元ページをそのままコピーして使うことで「ゆがみ」を100%防止
-          const [copiedPage] = await mergedPdf.copyPages(srcPdf, [data.pageIndex]);
-          
-          // 元のPDFが持っている回転と、ユーザーが画面上で操作した回転を足し合わせる
-          const originalRot = copiedPage.getRotation() ? copiedPage.getRotation().angle : 0;
-          const totalRotation = (originalRot + data.rotation) % 360;
-          
-          copiedPage.setRotation(PDFLib.degrees(totalRotation));
-          mergedPdf.addPage(copiedPage);
-
-          if (pageNumToggle.checked && i >= startPageIndex) {
-            const currentNum = i - startPageIndex + 1;
-            const text = String(currentNum);
-            const textWidth = font.widthOfTextAtSize(text, fontSize);
+        function EditorModal({ page, onClose, onSave }) {
+            const [annotations, setAnnotations] = useState(page.annotations || []);
+            const [mode, setMode] = useState('text');
+            const [selectedId, setSelectedId] = useState(null);
             
-            // ページの物理サイズ（回転する前のベースサイズ）を取得
-            const { width: W, height: H } = copiedPage.getSize();
+            // 入力前のデフォルト状態管理
+            const [color, setColor] = useState('#ef4444');
+            const [fontSize, setFontSize] = useState(24);
+            const [fontFamily, setFontFamily] = useState('sans-serif');
             
-            // 見た目上のサイズ（縦横）を計算
-            const isSideways = (totalRotation === 90 || totalRotation === 270);
-            const visualW = isSideways ? H : W;
+            const [isSigning, setIsSigning] = useState(false);
+            const [draggingId, setDraggingId] = useState(null);
+            const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
             
-            const align = pageNumPos.value;
-            let visualX;
-            
-            // 左端・右端からのマージンも、下からのマージンと同じ値に揃える
-            if (align === 'left') {
-              visualX = marginPt;
-            } else if (align === 'center') {
-              visualX = visualW / 2 - textWidth / 2;
-            } else if (align === 'right') {
-              visualX = visualW - marginPt - textWidth;
-            }
-            
-            const visualY = marginPt;
-            
-            // ★ページ自体が回転しているため、文字の方を「逆回転」させて正しい位置に打ち込む数学的計算
-            let drawX, drawY, drawRot;
-            if (totalRotation === 0) {
-              drawX = visualX;
-              drawY = visualY;
-              drawRot = 0;
-            } else if (totalRotation === 90) {
-              drawX = W - visualY;
-              drawY = visualX;
-              drawRot = 90; // 時計回りに90度回っている紙に対して、反時計回りに90度回して文字を打つ
-            } else if (totalRotation === 180) {
-              drawX = W - visualX;
-              drawY = H - visualY;
-              drawRot = 180;
-            } else if (totalRotation === 270) {
-              drawX = visualY;
-              drawY = H - visualX;
-              drawRot = 270;
-            }
+            const stampInputRef = useRef(null);
+            const signCanvasRef = useRef(null);
+            const layerRef = useRef(null);
 
-            copiedPage.drawText(text, {
-              x: drawX,
-              y: drawY,
-              size: fontSize,
-              font: font,
-              color: PDFLib.rgb(0, 0, 0),
-              rotate: PDFLib.degrees(drawRot)
-            });
-          }
+            // 選択中の要素を取得
+            const selectedAnn = annotations.find(a => a.id === selectedId);
+
+            const handleFontSizeChange = (e) => {
+                const newSize = Number(e.target.value);
+                setFontSize(newSize);
+                if (selectedId) setAnnotations(annotations.map(a => a.id === selectedId ? { ...a, size: newSize } : a));
+            };
+
+            const handleFontFamilyChange = (e) => {
+                const newFont = e.target.value;
+                setFontFamily(newFont);
+                if (selectedId) setAnnotations(annotations.map(a => a.id === selectedId ? { ...a, fontFamily: newFont } : a));
+            };
+
+            const handleColorChange = (c) => {
+                setColor(c);
+                if (selectedId) setAnnotations(annotations.map(a => a.id === selectedId ? { ...a, color: c } : a));
+            };
+
+            // 画像サイズ変更ハンドラ
+            const handleImageSizeChange = (e) => {
+                const newWidth = Number(e.target.value);
+                if (selectedId) {
+                    setAnnotations(annotations.map(a => {
+                        if (a.id === selectedId && a.type === 'image') {
+                            const ratio = a.aspectRatio || (a.width / a.height);
+                            return { ...a, width: newWidth, height: newWidth / ratio };
+                        }
+                        return a;
+                    }));
+                }
+            };
+
+            const handleCanvasClick = (e) => {
+                if (e.target !== layerRef.current) return;
+                setSelectedId(null);
+                const rect = layerRef.current.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+
+                if (mode === 'text') {
+                    const newId = Date.now();
+                    setAnnotations([...annotations, { id: newId, type: 'text', x, y, text: 'ここに入力', color, size: fontSize, fontFamily }]);
+                    setSelectedId(newId);
+                } else if (mode === 'sign') {
+                    setIsSigning({ x, y });
+                } else if (mode === 'stamp') {
+                    stampInputRef.current.dataset.targetX = x;
+                    stampInputRef.current.dataset.targetY = y;
+                    stampInputRef.current.click();
+                }
+            };
+
+            const handleMouseDown = (e, ann) => {
+                if (e.target.tagName.toLowerCase() === 'input') return;
+                e.stopPropagation();
+                setSelectedId(ann.id);
+                const rect = layerRef.current.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+                setDraggingId(ann.id);
+                setDragOffset({ x: ann.x - mouseX, y: ann.y - mouseY });
+            };
+
+            const handleMouseMove = (e) => {
+                if (draggingId === null) return;
+                const rect = layerRef.current.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+                const newX = mouseX + dragOffset.x;
+                const newY = mouseY + dragOffset.y;
+                setAnnotations(annotations.map(a => a.id === draggingId ? { ...a, x: newX, y: newY } : a));
+            };
+
+            const handleMouseUp = () => { if (draggingId !== null) setDraggingId(null); };
+
+            const handleTextBlur = (id, text) => {
+                if (text.trim() === '' || text === 'ここに入力') {
+                    setAnnotations(prev => prev.filter(a => a.id !== id));
+                    if (selectedId === id) setSelectedId(null);
+                }
+            };
+
+            const handleStampUpload = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const x = parseFloat(stampInputRef.current.dataset.targetX);
+                        const y = parseFloat(stampInputRef.current.dataset.targetY);
+                        
+                        let initialWidth = img.width;
+                        let initialHeight = img.height;
+                        const maxDim = 150;
+                        if (initialWidth > maxDim || initialHeight > maxDim) {
+                            if (initialWidth > initialHeight) {
+                                initialHeight = (initialHeight / initialWidth) * maxDim;
+                                initialWidth = maxDim;
+                            } else {
+                                initialWidth = (initialWidth / initialHeight) * maxDim;
+                                initialHeight = maxDim;
+                            }
+                        }
+                        
+                        const newId = Date.now();
+                        setAnnotations(prev => [...prev, { 
+                            id: newId, type: 'image', x, y, src: event.target.result, 
+                            width: initialWidth, height: initialHeight, aspectRatio: img.width / img.height 
+                        }]);
+                        setSelectedId(newId);
+                    };
+                    img.src = event.target.result;
+                };
+                reader.readAsDataURL(file);
+                e.target.value = '';
+            };
+
+            let isDrawing = false;
+            const startDrawing = (e) => { isDrawing = true; draw(e); };
+            const stopDrawing = () => { isDrawing = false; signCanvasRef.current.getContext('2d').beginPath(); };
+            const draw = (e) => {
+                if (!isDrawing) return;
+                const ctx = signCanvasRef.current.getContext('2d');
+                const rect = signCanvasRef.current.getBoundingClientRect();
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.strokeStyle = color;
+                ctx.lineTo(clientX - rect.left, clientY - rect.top);
+                ctx.stroke(); ctx.beginPath(); ctx.moveTo(clientX - rect.left, clientY - rect.top);
+            };
+            
+            const saveSignature = () => {
+                const dataUrl = signCanvasRef.current.toDataURL('image/png');
+                const newId = Date.now();
+                setAnnotations([...annotations, { 
+                    id: newId, type: 'image', x: isSigning.x, y: isSigning.y, src: dataUrl, 
+                    width: 150, height: 75, aspectRatio: 2
+                }]);
+                setSelectedId(newId);
+                setIsSigning(false);
+            };
+
+            return (
+                <div className="fixed inset-0 bg-gray-900/90 z-50 flex flex-col" onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
+                    <div className="bg-white p-4 flex justify-between items-center shadow">
+                        <h2 className="text-xl font-bold text-gray-800">ページ編集 (P.{page.originalPageNum})</h2>
+                        <div className="flex gap-2">
+                            <button onClick={onClose} className="px-4 py-2 bg-gray-200 rounded font-bold hover:bg-gray-300">キャンセル</button>
+                            <button onClick={() => onSave(page.id, annotations)} className="px-4 py-2 bg-orange-500 text-white rounded font-bold hover:bg-orange-600">保存して戻る</button>
+                        </div>
+                    </div>
+                    
+                    <div className="flex flex-1 overflow-hidden">
+                        <div className="w-64 bg-white p-4 flex flex-col gap-4 shadow-xl z-10">
+                            <div>
+                                <h3 className="font-bold text-gray-700 mb-2 text-sm">ツール</h3>
+                                <div className="flex flex-col gap-2">
+                                    <button onClick={() => { setMode('text'); setSelectedId(null); }} className={`p-2 rounded text-left ${mode === 'text' ? 'bg-orange-100 text-orange-700 font-bold' : 'bg-gray-50 hover:bg-gray-100'}`}>📝 テキスト</button>
+                                    <button onClick={() => { setMode('sign'); setSelectedId(null); }} className={`p-2 rounded text-left ${mode === 'sign' ? 'bg-orange-100 text-orange-700 font-bold' : 'bg-gray-50 hover:bg-gray-100'}`}>🖋 手書きサイン</button>
+                                    <button onClick={() => { setMode('stamp'); setSelectedId(null); }} className={`p-2 rounded text-left ${mode === 'stamp' ? 'bg-orange-100 text-orange-700 font-bold' : 'bg-gray-50 hover:bg-gray-100'}`}>🖼 画像・印鑑</button>
+                                    <input type="file" accept="image/*" className="hidden" ref={stampInputRef} onChange={handleStampUpload} />
+                                </div>
+                            </div>
+
+                            {(mode === 'text' || mode === 'sign' || selectedId) && (
+                                <div className="bg-gray-50 p-3 rounded border border-gray-100">
+                                    <h3 className="font-bold text-gray-700 mb-3 text-sm">{selectedId ? '選択中の要素の設定' : '追加する要素の設定'}</h3>
+                                    
+                                    {(!selectedId && (mode === 'text' || mode === 'sign')) || (selectedAnn?.type === 'text') ? (
+                                        <div className="flex gap-2 mb-3">
+                                            {['#000000', '#ef4444', '#3b82f6'].map(c => (
+                                                <button key={c} onClick={() => handleColorChange(c)} className={`w-8 h-8 rounded-full border-2 ${color === c ? 'border-orange-500 scale-110' : 'border-gray-300'}`} style={{ backgroundColor: c }} />
+                                            ))}
+                                        </div>
+                                    ) : null}
+
+                                    {(!selectedId && mode === 'text') || (selectedAnn?.type === 'text') ? (
+                                        <>
+                                            <select value={fontFamily} onChange={handleFontFamilyChange} className="w-full border rounded p-1 mb-3 text-sm">
+                                                <option value="sans-serif">ゴシック体</option>
+                                                <option value="serif">明朝体</option>
+                                                <option value="monospace">等幅</option>
+                                                <option value="'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif">ヒラギノ角ゴ / メイリオ</option>
+                                                <option value="'Hiragino Mincho ProN', 'Yu Mincho', serif">ヒラギノ明朝 / 游明朝</option>
+                                            </select>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xs text-gray-500 whitespace-nowrap">文字サイズ:</span>
+                                                <input type="range" min="12" max="144" value={selectedAnn ? selectedAnn.size : fontSize} onChange={handleFontSizeChange} className="flex-1" />
+                                            </div>
+                                        </>
+                                    ) : null}
+
+                                    {selectedAnn?.type === 'image' && (
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs text-gray-500 whitespace-nowrap">画像サイズ:</span>
+                                            <input type="range" min="20" max="800" value={selectedAnn.width} onChange={handleImageSizeChange} className="flex-1" />
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            <div className="mt-auto text-xs text-gray-500 bg-gray-50 p-3 rounded">
+                                <ul className="list-disc pl-4 space-y-1">
+                                    <li>要素の周りをドラッグして移動</li>
+                                    <li>クリックしてサイズや色を変更</li>
+                                    <li>ホバー時の「×」ボタンで削除</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div className="flex-1 overflow-auto bg-gray-800 p-8 flex justify-center items-start">
+                            <div className="canvas-container bg-white relative">
+                                <img src={page.previewUrl} style={{ width: page.dimensions.width, height: page.dimensions.height, transform: `rotate(${page.rotation}deg)` }} className="block pointer-events-none" />
+                                
+                                <div className="annotation-layer" ref={layerRef} onClick={handleCanvasClick}>
+                                    {annotations.map((ann) => (
+                                        <div key={ann.id} 
+                                            className={`annotation-item group whitespace-nowrap ${selectedId === ann.id ? 'ring-2 ring-orange-400 ring-offset-2 rounded' : ''}`} 
+                                            style={{ left: ann.x, top: ann.y }} 
+                                            onMouseDown={(e) => handleMouseDown(e, ann)}
+                                        >
+                                            <div className="drag-handle relative flex items-center justify-center shrink-0">
+                                                {ann.type === 'text' && (
+                                                    <input type="text" value={ann.text} 
+                                                        onChange={(e) => setAnnotations(annotations.map(a => a.id === ann.id ? { ...a, text: e.target.value } : a))}
+                                                        onBlur={(e) => handleTextBlur(ann.id, e.target.value)}
+                                                        onFocus={(e) => { 
+                                                            setSelectedId(ann.id);
+                                                            setFontSize(ann.size);
+                                                            setFontFamily(ann.fontFamily || 'sans-serif');
+                                                            setColor(ann.color || '#000000');
+                                                            if(e.target.value === 'ここに入力') e.target.select(); 
+                                                        }}
+                                                        className="bg-transparent border-b border-dashed border-gray-400 focus:border-orange-500 focus:outline-none focus:bg-white/90 text-center"
+                                                        style={{ color: ann.color, fontSize: `${ann.size}px`, fontFamily: ann.fontFamily, width: `${Math.max(ann.text.length, 5) + 1}em`, maxWidth: 'none' }}
+                                                        autoFocus={selectedId === ann.id}
+                                                    />
+                                                )}
+                                                {ann.type === 'image' && (
+                                                    <img src={ann.src} style={{ width: ann.width, height: ann.height, maxWidth: 'none', maxHeight: 'none' }} className="pointer-events-none shrink-0" />
+                                                )}
+                                                
+                                                <button 
+                                                    onClick={(e) => { e.stopPropagation(); setAnnotations(annotations.filter(a => a.id !== ann.id)); }} 
+                                                    className={`absolute -top-3 -right-3 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center transition-opacity text-xs shadow-md z-10 hover:bg-red-600 ${selectedId === ann.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                                                    title="削除"
+                                                >
+                                                    ×
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {isSigning && (
+                        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60]">
+                            <div className="bg-white p-6 rounded-3xl shadow-2xl max-w-sm w-full">
+                                <h3 className="text-xl font-bold mb-4 text-center">サインを描く</h3>
+                                <canvas ref={signCanvasRef} width={300} height={150} className="signature-canvas w-full mb-4"
+                                    onMouseDown={startDrawing} onMouseUp={stopDrawing} onMouseOut={stopDrawing} onMouseMove={draw}
+                                    onTouchStart={(e) => { e.preventDefault(); startDrawing(e); }} onTouchEnd={stopDrawing} onTouchMove={(e) => { e.preventDefault(); draw(e); }}
+                                ></canvas>
+                                <div className="flex gap-2">
+                                    <button onClick={() => setIsSigning(false)} className="flex-1 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 font-bold">キャンセル</button>
+                                    <button onClick={saveSignature} className="flex-1 py-3 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-bold">追加する</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
         }
 
-        const pdfBytes = await mergedPdf.save();
-        const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-        const url = URL.createObjectURL(blob);
-
-        if (isPrint) {
-          const iframe = document.createElement('iframe');
-          iframe.style.display = 'none';
-          iframe.src = url;
-          document.body.appendChild(iframe);
-          iframe.onload = () => { iframe.contentWindow.print(); };
-        } else {
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = "organized_document.pdf";
-          a.click();
-          URL.revokeObjectURL(url);
-        }
-      } catch (error) {
-        console.error(error);
-        alert('PDFの生成中にエラーが発生しました。\n詳細: ' + error.message);
-      }
-      hideLoading();
-    };
-
-    function showLoading() { loadingOverlay.classList.replace('hidden', 'flex'); }
-    function hideLoading() { loadingOverlay.classList.replace('flex', 'hidden'); }
-
-  </script>
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
 </body>
 </html>
