@@ -108,7 +108,7 @@
       };
       const [date, setDate] = useState(getTodayJST());
       const [menu, setMenu] = useState('');
-      const [theme, setTheme] = useState('');
+      const [themes, setThemes] = useState(['', '', '']);
       const [memo, setMemo] = useState('');
       const [rubyMenu, setRubyMenu] = useState('');
       const [rubyMemo, setRubyMemo] = useState('');
@@ -134,12 +134,12 @@
           if (doc.exists) {
             const data = doc.data();
             setMenu(data.menu || "");
-            setTheme(data.theme || "");
+            setThemes(data.themes || [data.theme || "", "", ""]);
             setMemo(data.memo || "");
             setRubyMenu(data.rubyMenu || "");
             setRubyMemo(data.rubyMemo || "");
           } else {
-            setMenu(""); setTheme(""); setMemo(""); setRubyMenu(""); setRubyMemo("");
+            setMenu(""); setThemes(["", "", ""]); setMemo(""); setRubyMenu(""); setRubyMemo("");
           }
         };
         loadData();
@@ -148,10 +148,10 @@
       const exportToCSV = async () => {
         const snapshot = await db.collection("lunch_newsletters").get();
         if (snapshot.empty) { alert("データがありません"); return; }
-        const rows = [["id", "menu", "theme", "memo", "rubyMenu", "rubyMemo"]];
+        const rows = [["id", "menu", "themes", "memo", "rubyMenu", "rubyMemo"]];
         snapshot.forEach(doc => {
           const d = doc.data();
-          rows.push([doc.id, d.menu, d.theme, d.memo, d.rubyMenu, d.rubyMemo]);
+          rows.push([doc.id, d.menu, JSON.stringify(d.themes || []), d.memo, d.rubyMenu, d.rubyMemo]);
         });
         const csvContent = rows.map(r => r.map(c => `"${(c||"").replace(/"/g, '""')}"`).join(",")).join("\n");
         const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -171,7 +171,7 @@
             const cols = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(c => c.replace(/^"|"$/g, '').replace(/""/g, '"'));
             if (cols[0]) {
               await db.collection("lunch_newsletters").doc(cols[0]).set({
-                menu: cols[1], theme: cols[2], memo: cols[3], rubyMenu: cols[4], rubyMemo: cols[5]
+                menu: cols[1], themes: JSON.parse(cols[2] || "[]"), memo: cols[3], rubyMenu: cols[4], rubyMemo: cols[5]
               });
             }
           }
@@ -185,7 +185,7 @@
       const saveToFirebase = async (silent = false) => {
         setIsSaving(true);
         try {
-          await db.collection("lunch_newsletters").doc(date).set({ menu, theme, memo, rubyMenu, rubyMemo });
+          await db.collection("lunch_newsletters").doc(date).set({ menu, themes, memo, rubyMenu, rubyMemo });
           if (!silent) alert("保存完了");
           return true;
         } catch (e) {
@@ -201,7 +201,7 @@
         setIsSaving(true);
         let saved = false;
         try {
-          await db.collection("lunch_newsletters").doc(date).set({ menu, theme, memo, rubyMenu, rubyMemo });
+          await db.collection("lunch_newsletters").doc(date).set({ menu, themes, memo, rubyMenu, rubyMemo });
           saved = true;
         } catch (e) {
           const proceed = window.confirm("クラウド保存に失敗しました。それでも印刷しますか？");
@@ -219,7 +219,8 @@
         if (!apiKey) { setShowSettings(true); return; }
         setIsLoading(true);
         // ★ です・ます調を明示
-        const prompt = `小学校の栄養教諭として、給食ひとくちメモを100〜150文字程度で【3パターン】作成してください。文体は必ずです・ます調（丁寧語）で統一してください。${theme ? 'テーマは「' + theme + '」' : ''} 形式：【案1】文章===【案2】文章===【案3】文章\n献立名: ${menu}`;
+        const themeInstructions = [0,1,2].map(i => themes[i] ? `案${i+1}のテーマは「${themes[i]}」` : `案${i+1}はテーマなしで自由に`).join('、');
+        const prompt = `小学校の栄養教諭として、給食ひとくちメモを100〜150文字程度で【3パターン】作成してください。文体は必ずです・ます調（丁寧語）で統一してください。${themeInstructions}。形式：【案1】文章===【案2】文章===【案3】文章\n献立名: ${menu}`;
         try {
           const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -288,8 +289,13 @@
                   <textarea value={menu} onChange={(e) => {setMenu(e.target.value); setRubyMenu('');}} className="w-full p-2 border rounded h-16 text-sm" />
                 </div>
                 <div>
-                  <label className="text-sm font-bold">テーマ (任意)</label>
-                  <input type="text" value={theme} onChange={(e) => setTheme(e.target.value)} placeholder="例: かむこと、旬の野菜" className="w-full p-2 border rounded text-sm" />
+                  <label className="text-sm font-bold">テーマ（各案ごとに任意）</label>
+                  {[0,1,2].map(i => (
+                    <div key={i} className="flex items-center gap-2 mt-1">
+                      <span className="text-xs text-orange-600 font-bold whitespace-nowrap">案{i+1}</span>
+                      <input type="text" value={themes[i]} onChange={(e) => { const t = [...themes]; t[i] = e.target.value; setThemes(t); }} placeholder="例: かむこと、旬の野菜" className="w-full p-2 border rounded text-sm" />
+                    </div>
+                  ))}
                 </div>
                 <button onClick={generateMemoWithAI} disabled={isLoading || !menu} className="w-full py-2 bg-orange-500 text-white rounded font-bold text-sm shadow">
                   {isLoading ? 'AI考え中...' : '🤖 AI案を3つ作成（です・ます調）'}
