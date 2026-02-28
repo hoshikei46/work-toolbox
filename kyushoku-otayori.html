@@ -67,8 +67,12 @@
   <script type="text/babel">
     const { useState, useEffect } = React;
 
+    // ==========================================
+    // 🔐 アプリの共通パスワード（合言葉）
+    // ==========================================
     const SHARED_PASSWORD = "otayori1234";
 
+    // Firebase の設定
     const firebaseConfig = {
       apiKey: "AIzaSyBA4GCW-DXP2SenQBotyF0G5PVZ5IPrpTc",
       authDomain: "work-stock-app.firebaseapp.com",
@@ -90,10 +94,12 @@
     };
 
     function App() {
+      // 🔐 ログイン状態
       const [isUnlocked, setIsUnlocked] = useState(false);
       const [inputPassword, setInputPassword] = useState('');
       const [passError, setPassError] = useState('');
 
+      // 設定関連
       const [apiKey, setApiKey] = useState('');
       const [modelName, setModelName] = useState('gemini-2.5-flash');
       const [showSettings, setShowSettings] = useState(false);
@@ -120,6 +126,7 @@
       const [activeTab, setActiveTab] = useState('edit');
       const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
+      // 初回起動時のロックチェックと画面サイズ監視
       useEffect(() => {
         if (localStorage.getItem('kyushoku_app_unlocked') === 'true') setIsUnlocked(true);
         const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -127,9 +134,11 @@
         return () => window.removeEventListener('resize', handleResize);
       }, []);
 
+      // ログインできている時だけクラウドからデータを読み込む
       useEffect(() => {
         if (!isUnlocked || !db) return;
         
+        // ① おたよりデータの読み込み
         const loadData = async () => {
           const doc = await db.collection("lunch_newsletters").doc(date).get();
           if (doc.exists) {
@@ -144,6 +153,7 @@
           }
         };
 
+        // ② クラウドに保存された「APIキー」と「定型文」の読み込み
         const loadSharedSettings = async () => {
           try {
             const apiDoc = await db.collection("system_settings").doc("api_config").get();
@@ -156,7 +166,7 @@
             if (tmplDoc.exists && tmplDoc.data().templates) {
               setTemplates(tmplDoc.data().templates);
             }
-          } catch (e) { console.error(e); }
+          } catch (e) { console.error("設定の読み込みエラー:", e); }
         };
 
         loadData();
@@ -260,16 +270,12 @@
         location.reload();
       };
 
-      // ==========================================
-      // ★ 最強のAI分割プログラム（バグ修正）
-      // ==========================================
       const generateMemoWithAI = async () => {
         if (!apiKey) { alert("右上の⚙️設定から、Gemini APIキーを登録してください。"); setShowSettings(true); return; }
         setIsLoading(true);
         
         const themeInstructions = [0,1,2].map(i => themes[i] ? `案${i+1}のテーマは「${themes[i]}」` : `案${i+1}は自由に`).join('、');
         
-        // プロンプトをさらに明確に指定
         const prompt = `小学校の栄養教諭として、給食ひとくちメモを100〜150文字程度で【3パターン】作成してください。文体は必ずです・ます調（丁寧語）で統一してください。${themeInstructions}。
 必ず以下のフォーマットで出力してください。他の記号や前置きは絶対に不要です。
 
@@ -291,14 +297,11 @@
           if (data.error) throw new Error(data.error.message);
           
           let aiText = data.candidates[0].content.parts[0].text;
-          
-          // AIが勝手に出した区切り線（===や---）を削除
           aiText = aiText.replace(/===/g, '').replace(/---/g, '');
           
-          // 「【案1】」「【案2】」「【案3】」という見出しを基準に強制分割！
           const splitOptions = aiText.split(/【案\d】/g)
             .map(t => t.trim())
-            .filter(t => t.length > 0); // 空の文字を削除
+            .filter(t => t.length > 0);
             
           if (splitOptions.length > 0) {
             setAiOptions(splitOptions);
@@ -314,6 +317,7 @@
 
       const applyRubyWithAI = async () => {
         if (!apiKey) { alert("右上の⚙️設定から、Gemini APIキーを登録してください。"); return; }
+        if (!menu && !memo) return;
         setIsLoading(true);
         const prompt = `全ての漢字にHTMLの<ruby>タグでふりがなを振れ。間に===を挟め。\n${menu}\n===\n${memo}`;
         try {
@@ -328,6 +332,28 @@
           setRubyMemo(parts[1].trim().replace(/\n/g, '<br />　'));
         } catch (e) { alert("ふりがなエラー"); }
         setIsLoading(false);
+      };
+
+      // ★ 新機能：手動で定型文を追加する処理
+      const appendTemplate = () => {
+        const jstDate = new Date(new Date(date).getTime() + 9 * 60 * 60 * 1000);
+        const dayOfWeek = jstDate.getUTCDay();
+        const template = templates[dayOfWeek] || '';
+        
+        if (!template) {
+          alert("この曜日の定型文は設定されていません。");
+          return;
+        }
+
+        setMemo(prev => {
+          const trimmed = prev.trim();
+          if (trimmed === '') {
+            return template;
+          } else {
+            return trimmed + '\n\n' + template;
+          }
+        });
+        setRubyMemo(''); // 変更が加わるのでルビはリセット
       };
 
       const formatDate = (dStr) => {
@@ -393,8 +419,8 @@
                   <div className="flex justify-between items-center mb-1 text-sm font-bold">
                     <label>日付</label>
                     <div className="flex gap-1">
-                      <button onClick={() => setDate(new Date(new Date(date).getTime() - 86400000).toISOString().split('T')[0])} className="bg-orange-100 px-2 py-1 rounded text-[10px]">前日</button>
-                      <button onClick={() => setDate(new Date(new Date(date).getTime() + 86400000).toISOString().split('T')[0])} className="bg-orange-100 px-2 py-1 rounded text-[10px]">翌日</button>
+                      <button onClick={() => setDate(new Date(new Date(date).getTime() - 86400000).toISOString().split('T')[0])} className="bg-orange-100 px-2 py-1 rounded text-[10px] text-orange-700 hover:bg-orange-200">前日</button>
+                      <button onClick={() => setDate(new Date(new Date(date).getTime() + 86400000).toISOString().split('T')[0])} className="bg-orange-100 px-2 py-1 rounded text-[10px] text-orange-700 hover:bg-orange-200">翌日</button>
                     </div>
                   </div>
                   <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full p-2 border rounded text-sm focus:ring-2 focus:ring-orange-300 outline-none" />
@@ -415,22 +441,33 @@
                 <button onClick={generateMemoWithAI} disabled={isLoading || !menu} className="w-full py-3 bg-orange-500 text-white rounded-lg font-bold text-sm shadow hover:bg-orange-600 active:scale-95 transition">
                   {isLoading ? 'AI考え中...' : '🤖 AI案を3つ作成（です・ます調）'}
                 </button>
+                
                 <div className="pt-2 border-t mt-2">
-                  <label className="text-sm font-bold">本文調整</label>
-                  <textarea value={memo} onChange={(e) => {setMemo(e.target.value); setRubyMemo('');}} className="w-full p-2 border rounded h-32 text-xs bg-yellow-50 mt-1 focus:ring-2 focus:ring-orange-300 outline-none" />
+                  {/* ★ 新機能：手動で定型文を追加するボタン */}
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-sm font-bold">本文調整</label>
+                    <button 
+                      onClick={appendTemplate}
+                      className="text-xs bg-orange-100 text-orange-700 font-bold px-2 py-1 rounded hover:bg-orange-200 transition border border-orange-200"
+                    >
+                      📝 今日の定型文を末尾に追加
+                    </button>
+                  </div>
+                  <textarea value={memo} onChange={(e) => {setMemo(e.target.value); setRubyMemo('');}} className="w-full p-2 border rounded h-32 text-xs bg-yellow-50 focus:ring-2 focus:ring-orange-300 outline-none" />
                 </div>
+
                 <div className="pt-4 space-y-2 border-t">
                   <div className="flex justify-between text-xs font-bold">
                     <span>フォントサイズ</span>
                     <span>{fontSize}pt</span>
                   </div>
                   <input type="range" min="8" max="18" step="0.5" value={fontSize} onChange={(e) => setFontSize(e.target.value)} className="w-full accent-orange-500" />
-                  <button onClick={applyRubyWithAI} className="w-full py-2 bg-green-600 text-white rounded font-bold text-sm shadow hover:bg-green-700 transition">✨ ふりがなを振る</button>
+                  <button onClick={applyRubyWithAI} disabled={isLoading || !memo} className="w-full py-2 bg-green-600 text-white rounded font-bold text-sm shadow hover:bg-green-700 transition disabled:bg-gray-400">✨ ふりがなを振る</button>
                   <div className="flex gap-2">
-                    <button onClick={() => saveToFirebase(false)} disabled={isSaving} className="flex-1 py-3 bg-blue-600 text-white rounded-lg font-bold text-sm shadow hover:bg-blue-700 transition">
+                    <button onClick={() => saveToFirebase(false)} disabled={isSaving} className="flex-1 py-3 bg-blue-600 text-white rounded-lg font-bold text-sm shadow hover:bg-blue-700 transition disabled:bg-gray-400">
                       {isSaving ? '保存中...' : '💾 保存'}
                     </button>
-                    <button onClick={handlePrint} disabled={isSaving} className="flex-1 py-3 bg-gray-800 text-white rounded-lg font-bold text-sm shadow hover:bg-black transition">
+                    <button onClick={handlePrint} disabled={isSaving} className="flex-1 py-3 bg-gray-800 text-white rounded-lg font-bold text-sm shadow hover:bg-black transition disabled:bg-gray-400">
                       {isSaving ? '保存中...' : '🖨️ 印刷'}
                     </button>
                   </div>
@@ -472,7 +509,7 @@
           {showOptionsModal && (
             <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-[100]">
               <div className="bg-white rounded-2xl p-6 w-full max-w-5xl shadow-2xl flex flex-col max-h-[90vh]">
-                <h3 className="font-bold mb-4 text-center text-lg text-orange-800 border-b pb-2">🤖 どれを採用しますか？（スマホでも選びやすくなりました）</h3>
+                <h3 className="font-bold mb-4 text-center text-lg text-orange-800 border-b pb-2">🤖 どれを採用しますか？</h3>
                 <div className="overflow-y-auto flex-grow pr-1">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pb-4">
                     {aiOptions.map((opt, i) => (
