@@ -9,6 +9,7 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
 
@@ -25,7 +26,6 @@
         box-shadow: none !important;
       }
     }
-
     .preview-container {
       background-color: #e5e7eb;
       padding: 40px 20px;
@@ -33,7 +33,6 @@
       display: flex;
       justify-content: center;
     }
-
     #printable-area {
       background-color: white;
       width: 182mm;
@@ -44,7 +43,6 @@
       position: relative;
       color: black;
     }
-
     #printable-area::after {
       content: "--- 1ページ目の下端 (B5) ---";
       position: absolute;
@@ -58,12 +56,7 @@
       pointer-events: none;
       display: block;
     }
-
-    .unified-text { 
-      font-size: var(--font-size, 12.5pt); 
-      line-height: 2.0; 
-      word-break: break-all;
-    }
+    .unified-text { font-size: var(--font-size, 12.5pt); line-height: 2.0; word-break: break-all; }
     .unified-text ruby { ruby-align: center; ruby-position: over; }
     .unified-text rt { font-size: 0.6em; color: #333; line-height: 1; transform: translateY(-10%); }
   </style>
@@ -74,6 +67,12 @@
   <script type="text/babel">
     const { useState, useEffect } = React;
 
+    // ==========================================
+    // 🔐 アプリの共通パスワード（合言葉）
+    // ==========================================
+    const SHARED_PASSWORD = "otayori1234";
+
+    // Firebase の設定
     const firebaseConfig = {
       apiKey: "AIzaSyBA4GCW-DXP2SenQBotyF0G5PVZ5IPrpTc",
       authDomain: "work-stock-app.firebaseapp.com",
@@ -95,8 +94,14 @@
     };
 
     function App() {
+      // 🔐 ログイン状態
+      const [isUnlocked, setIsUnlocked] = useState(false);
+      const [inputPassword, setInputPassword] = useState('');
+      const [passError, setPassError] = useState('');
+
+      // 設定関連
       const [apiKey, setApiKey] = useState('');
-      const [modelName, setModelName] = useState('gemini-1.5-flash');
+      const [modelName, setModelName] = useState('gemini-2.5-flash');
       const [showSettings, setShowSettings] = useState(false);
       const [showTemplateSettings, setShowTemplateSettings] = useState(false);
       const [templates, setTemplates] = useState(defaultTemplates);
@@ -118,17 +123,22 @@
       const [isSaving, setIsSaving] = useState(false);
       const [aiOptions, setAiOptions] = useState([]);
       const [showOptionsModal, setShowOptionsModal] = useState(false);
+      const [activeTab, setActiveTab] = useState('edit');
+      const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
+      // 初回起動時のロックチェックと画面サイズ監視
       useEffect(() => {
-        const storedKey = localStorage.getItem('gemini_api_key');
-        const storedModel = localStorage.getItem('gemini_model_name');
-        const storedTemplates = localStorage.getItem('kyushoku_templates');
-        if (storedKey) setApiKey(storedKey);
-        if (storedModel) setModelName(storedModel);
-        if (storedTemplates) setTemplates(JSON.parse(storedTemplates));
+        if (localStorage.getItem('kyushoku_app_unlocked') === 'true') setIsUnlocked(true);
+        const handleResize = () => setIsMobile(window.innerWidth < 768);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
       }, []);
 
+      // ★ ログインできている時だけクラウドからデータを読み込む
       useEffect(() => {
+        if (!isUnlocked || !db) return;
+        
+        // ① おたよりデータの読み込み
         const loadData = async () => {
           const doc = await db.collection("lunch_newsletters").doc(date).get();
           if (doc.exists) {
@@ -142,8 +152,65 @@
             setMenu(""); setThemes(["", "", ""]); setMemo(""); setRubyMenu(""); setRubyMemo("");
           }
         };
+
+        // ② クラウドに保存された「APIキー」と「定型文」の読み込み
+        const loadSharedSettings = async () => {
+          try {
+            const apiDoc = await db.collection("system_settings").doc("api_config").get();
+            if (apiDoc.exists) {
+              const data = apiDoc.data();
+              if (data.apiKey) setApiKey(data.apiKey);
+              if (data.modelName) setModelName(data.modelName);
+            }
+            const tmplDoc = await db.collection("system_settings").doc("templates").get();
+            if (tmplDoc.exists && tmplDoc.data().templates) {
+              setTemplates(tmplDoc.data().templates);
+            }
+          } catch (e) { console.error("設定の読み込みエラー:", e); }
+        };
+
         loadData();
-      }, [date]);
+        loadSharedSettings();
+      }, [date, isUnlocked]);
+
+      const handleLogin = (e) => {
+        e.preventDefault();
+        if (inputPassword === SHARED_PASSWORD) {
+          localStorage.setItem('kyushoku_app_unlocked', 'true');
+          setIsUnlocked(true);
+          setPassError('');
+        } else {
+          setPassError('パスワードが違います');
+        }
+      };
+
+      const handleLogout = () => {
+        localStorage.removeItem('kyushoku_app_unlocked');
+        setIsUnlocked(false);
+        setInputPassword('');
+      };
+
+      // ★ API設定をクラウドに保存（全員に共有）
+      const saveApiSettings = async () => {
+        try {
+          await db.collection("system_settings").doc("api_config").set({ apiKey, modelName });
+          alert("API設定をクラウドに保存しました。\nこれで他の先生もAI機能を使えます！");
+          setShowSettings(false);
+        } catch (e) {
+          alert("保存に失敗しました。");
+        }
+      };
+
+      // ★ 定型文をクラウドに保存（全員に共有）
+      const saveSharedTemplates = async () => {
+        try {
+          await db.collection("system_settings").doc("templates").set({ templates });
+          alert("定型文をクラウドに保存しました。\n他の先生の画面にも反映されます！");
+          setShowTemplateSettings(false);
+        } catch (e) {
+          alert("保存に失敗しました。");
+        }
+      };
 
       const exportToCSV = async () => {
         const snapshot = await db.collection("lunch_newsletters").get();
@@ -181,7 +248,12 @@
         reader.readAsText(file);
       };
 
-      // 保存処理（silent=trueの場合はアラートなし）
+      const clearData = async () => {
+        if (!window.confirm(`${formatDate(date)} の内容をすべて消去しますか？\nこの操作は元に戻せません。`)) return;
+        setMenu(''); setThemes(['', '', '']); setMemo(''); setRubyMenu(''); setRubyMemo('');
+        try { await db.collection("lunch_newsletters").doc(date).delete(); } catch (e) {}
+      };
+
       const saveToFirebase = async (silent = false) => {
         setIsSaving(true);
         try {
@@ -191,24 +263,13 @@
         } catch (e) {
           if (!silent) alert("保存失敗");
           return false;
-        } finally {
-          setIsSaving(false);
-        }
+        } finally { setIsSaving(false); }
       };
 
-      // 印刷前にクラウド自動保存してから印刷
       const handlePrint = async () => {
         setIsSaving(true);
-        let saved = false;
-        try {
-          await db.collection("lunch_newsletters").doc(date).set({ menu, themes, memo, rubyMenu, rubyMemo });
-          saved = true;
-        } catch (e) {
-          const proceed = window.confirm("クラウド保存に失敗しました。それでも印刷しますか？");
-          if (!proceed) { setIsSaving(false); return; }
-        }
+        try { await db.collection("lunch_newsletters").doc(date).set({ menu, themes, memo, rubyMenu, rubyMemo }); } catch (e) {}
         setIsSaving(false);
-
         const printContent = document.getElementById("printable-area").innerHTML;
         document.body.innerHTML = `<div style="width: 182mm; padding: 10mm; box-sizing: border-box; background: white; color: black; --font-size: ${fontSize}pt;">${printContent}</div>`;
         window.print();
@@ -216,10 +277,9 @@
       };
 
       const generateMemoWithAI = async () => {
-        if (!apiKey) { setShowSettings(true); return; }
+        if (!apiKey) { alert("右上の⚙️設定から、Gemini APIキーを登録してください。"); setShowSettings(true); return; }
         setIsLoading(true);
-        // ★ です・ます調を明示
-        const themeInstructions = [0,1,2].map(i => themes[i] ? `案${i+1}のテーマは「${themes[i]}」` : `案${i+1}はテーマなしで自由に`).join('、');
+        const themeInstructions = [0,1,2].map(i => themes[i] ? `案${i+1}のテーマは「${themes[i]}」` : `案${i+1}は自由に`).join('、');
         const prompt = `小学校の栄養教諭として、給食ひとくちメモを100〜150文字程度で【3パターン】作成してください。文体は必ずです・ます調（丁寧語）で統一してください。${themeInstructions}。形式：【案1】文章===【案2】文章===【案3】文章\n献立名: ${menu}`;
         try {
           const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
@@ -227,14 +287,16 @@
             body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
           });
           const data = await res.json();
+          if (data.error) throw new Error(data.error.message);
           const splitOptions = data.candidates[0].content.parts[0].text.split('===').map(t => t.replace(/【案\d】/g, '').trim());
           setAiOptions(splitOptions);
           setShowOptionsModal(true);
-        } catch (e) { alert("AIエラー"); }
+        } catch (e) { alert("AIエラー: APIキーが正しいか確認してください。\n" + e.message); }
         setIsLoading(false);
       };
 
       const applyRubyWithAI = async () => {
+        if (!apiKey) { alert("右上の⚙️設定から、Gemini APIキーを登録してください。"); return; }
         setIsLoading(true);
         const prompt = `全ての漢字にHTMLの<ruby>タグでふりがなを振れ。間に===を挟め。\n${menu}\n===\n${memo}`;
         try {
@@ -243,6 +305,7 @@
             body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
           });
           const data = await res.json();
+          if (data.error) throw new Error(data.error.message);
           const parts = data.candidates[0].content.parts[0].text.split('===');
           setRubyMenu(parts[0].trim());
           setRubyMemo(parts[1].trim().replace(/\n/g, '<br />　'));
@@ -256,6 +319,43 @@
         return `${d.getMonth() + 1}月${d.getDate()}日（${days[d.getDay()]}）`;
       };
 
+
+      // ==========================================
+      // 🔐 パスワード入力画面（ロック中）
+      // ==========================================
+      if (!isUnlocked) {
+        return (
+          <div className="min-h-screen flex items-center justify-center bg-orange-50 p-4">
+            <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm">
+              <div className="text-center mb-6">
+                <span className="text-6xl">🍲</span>
+                <h1 className="text-2xl font-bold text-orange-600 mt-4">給食おたよりメーカー</h1>
+                <p className="text-sm text-gray-500 mt-1">共有ワークスペース</p>
+              </div>
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">合言葉（パスワード）</label>
+                  <input 
+                    type="password" 
+                    value={inputPassword} 
+                    onChange={(e) => setInputPassword(e.target.value)} 
+                    className="w-full p-3 border rounded-lg bg-gray-50 focus:bg-white focus:ring-2 focus:ring-orange-400 outline-none text-center tracking-widest text-lg" 
+                    placeholder="パスワードを入力"
+                  />
+                </div>
+                {passError && <p className="text-red-500 text-sm font-bold text-center">{passError}</p>}
+                <button type="submit" className="w-full py-3 bg-orange-500 text-white font-bold rounded-lg hover:bg-orange-600 shadow-md transition">
+                  ログイン
+                </button>
+              </form>
+            </div>
+          </div>
+        );
+      }
+
+      // ==========================================
+      // ★ メインアプリ画面（ロック解除後）
+      // ==========================================
       const fullHtml = `　<ruby>給食<rt>きゅうしょく</rt></ruby>の<ruby>時間<rt>じかん</rt></ruby>になりました。<br /><br />　みなさん、<ruby>食器<rt>しょっき</rt></ruby>やはしの<ruby>向<rt>む</rt></ruby>きは、あっていますか？ <ruby>食<rt>た</rt></ruby>べものや、つくってくれた<ruby>人<rt>ひと</rt></ruby>たちに<ruby>感謝<rt>かんしゃ</rt></ruby>の<ruby>気持<rt>きも</rt></ruby>ちをこめて、<ruby>食事<rt>しょくじ</rt></ruby>のあいさつをしましょう。<br /><br />　<ruby>今日<rt>きょう</rt></ruby>のメニューは、 ${rubyMenu || menu || "（献立名）"} です。<br /><br />　${rubyMemo || (memo ? memo.replace(/\n/g, '<br />　') : "（ここにAIが作成した本文が入ります）")}`;
 
       return (
@@ -266,13 +366,18 @@
               <button onClick={exportToCSV} className="bg-orange-700 px-2 py-1 rounded text-xs">📥 保存Excel</button>
               <label className="bg-orange-700 px-2 py-1 rounded text-xs cursor-pointer">📤 読込Excel<input type="file" accept=".csv" onChange={importFromCSV} className="hidden" /></label>
               <button onClick={() => setShowTemplateSettings(true)} className="bg-orange-700 px-2 py-1 rounded text-xs">📝 定型文</button>
-              <button onClick={() => setShowSettings(true)} className="bg-orange-700 px-2 py-1 rounded text-xs">⚙️ 設定</button>
+              <button onClick={() => setShowSettings(true)} className="bg-orange-700 px-2 py-1 rounded text-xs font-bold ring-2 ring-white">⚙️ API設定</button>
+              <button onClick={handleLogout} className="bg-red-600 hover:bg-red-700 px-2 py-1 rounded text-xs font-bold transition">ログアウト</button>
             </div>
           </header>
 
+          <div className="md:hidden flex border-b bg-white" style={{ flexShrink: 0 }}>
+            <button onClick={() => setActiveTab('edit')} className={"flex-1 py-2 text-sm font-bold " + (activeTab === 'edit' ? 'border-b-2 border-orange-500 text-orange-600' : 'text-gray-400')}>✏️ 編集</button>
+            <button onClick={() => setActiveTab('preview')} className={"flex-1 py-2 text-sm font-bold " + (activeTab === 'preview' ? 'border-b-2 border-orange-500 text-orange-600' : 'text-gray-400')}>👁️ プレビュー</button>
+          </div>
+
           <main style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-            {/* 編集パネル（50%） */}
-            <section style={{ width: '50%', overflowY: 'auto', borderRight: '1px solid #e5e7eb' }} className="bg-white p-5 shadow-inner">
+            <section style={{ width: isMobile ? '100%' : '50%', overflowY: 'auto', borderRight: '1px solid #e5e7eb', display: isMobile && activeTab === 'preview' ? 'none' : 'block' }} className="bg-white p-5 shadow-inner">
               <div className="space-y-4">
                 <div>
                   <div className="flex justify-between items-center mb-1 text-sm font-bold">
@@ -319,13 +424,14 @@
                       {isSaving ? '保存中...' : '🖨️ 印刷'}
                     </button>
                   </div>
-                  <p className="text-[10px] text-gray-400 text-center">※ 印刷時はクラウドへ自動保存されます</p>
+                  <button onClick={clearData} className="w-full py-2 bg-red-100 text-red-600 border border-red-300 rounded font-bold text-sm hover:bg-red-200">
+                    🗑️ この日の内容を消去
+                  </button>
                 </div>
               </div>
             </section>
 
-            {/* プレビュー画面（50%） */}
-            <section style={{ width: '50%', overflowY: 'auto' }} className="preview-container">
+            <section style={{ width: isMobile ? '100%' : '50%', overflowY: 'auto', display: isMobile && activeTab === 'edit' ? 'none' : 'flex' }} className="preview-container">
               <div id="printable-area" style={{ '--font-size': `${fontSize}pt` }}>
                 <div className="flex justify-between items-end border-b-2 border-black pb-1 mb-4">
                   <h2 className="text-xl font-bold">給食ひとくちおたより</h2>
@@ -336,42 +442,39 @@
             </section>
           </main>
 
-          {/* AIローディングポップアップ */}
+          {/* AIローディング */}
           {isLoading && (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
               <div className="bg-white rounded-3xl p-8 shadow-2xl flex flex-col items-center gap-4" style={{ minWidth: "260px" }}>
                 <div style={{ fontSize: "56px", animation: "popbounce 0.8s infinite alternate" }}>🍱</div>
                 <div className="flex gap-2">
                   {[0,1,2].map(i => (
-                    <div key={i} style={{
-                      width: "10px", height: "10px", borderRadius: "50%",
-                      backgroundColor: "#f97316",
-                      animation: `popbounce 0.6s ${i * 0.2}s infinite alternate`
-                    }} />
+                    <div key={i} style={{ width: "10px", height: "10px", borderRadius: "50%", backgroundColor: "#f97316", animation: `popbounce 0.6s ${i * 0.2}s infinite alternate` }} />
                   ))}
                 </div>
                 <p className="text-orange-500 font-bold text-sm">AIが考え中です…</p>
-                <p className="text-gray-400 text-xs">おいしいメモを作っています 🌟</p>
               </div>
-              <style>{`
-                @keyframes popbounce {
-                  from { transform: translateY(0px); }
-                  to { transform: translateY(-12px); }
-                }
-              `}</style>
+              <style>{`@keyframes popbounce { from { transform: translateY(0px); } to { transform: translateY(-12px); } }`}</style>
             </div>
           )}
 
-          {/* モーダル類 */}
+          {/* AI案選択モーダル */}
           {showOptionsModal && (
             <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
               <div className="bg-white rounded-xl p-5 w-full max-w-5xl shadow-2xl">
-                <h3 className="font-bold mb-4 text-center">AIが作成した3つの案（選ぶと本文に反映されます）</h3>
+                <h3 className="font-bold mb-4 text-center">AIが作成した3つの案</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {aiOptions.map((opt, i) => (
                     <div key={i} className="bg-orange-50 p-4 rounded border border-orange-200 flex flex-col h-full">
                       <p className="text-xs leading-relaxed flex-1 mb-4 whitespace-pre-wrap">{opt}</p>
-                      <button onClick={() => {setMemo(opt + "\n\n" + templates[new Date(date).getDay()]); setRubyMemo(''); setShowOptionsModal(false);}} className="w-full bg-orange-500 text-white py-2 rounded font-bold text-sm">この案を採用</button>
+                      <button onClick={() => {
+                        const jstDate = new Date(new Date(date).getTime() + 9 * 60 * 60 * 1000);
+                        const dayOfWeek = jstDate.getUTCDay();
+                        const template = templates[dayOfWeek] || '';
+                        setMemo(opt + (template ? "\n\n" + template : ''));
+                        setRubyMemo('');
+                        setShowOptionsModal(false);
+                      }} className="w-full bg-orange-500 text-white py-2 rounded font-bold text-sm">この案を採用</button>
                     </div>
                   ))}
                 </div>
@@ -380,10 +483,11 @@
             </div>
           )}
 
+          {/* 定型文設定モーダル（共有） */}
           {showTemplateSettings && (
             <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
               <div className="bg-white rounded-xl p-5 w-full max-w-lg shadow-2xl">
-                <h3 className="font-bold mb-3">曜日ごとの定型文設定</h3>
+                <h3 className="font-bold mb-3 text-orange-800">📝 曜日ごとの定型文設定<span className="text-xs text-gray-500 block">※ここで保存すると、他の先生の画面にも反映されます</span></h3>
                 <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-2">
                   {[1,2,3,4,5].map(day => (
                     <div key={day}>
@@ -392,24 +496,33 @@
                     </div>
                   ))}
                 </div>
-                <button onClick={() => {localStorage.setItem('kyushoku_templates', JSON.stringify(templates)); setShowTemplateSettings(false);}} className="w-full py-2 bg-orange-600 text-white rounded mt-4 font-bold">設定を保存</button>
+                <button onClick={saveSharedTemplates} className="w-full py-2 bg-orange-600 text-white rounded mt-4 font-bold hover:bg-orange-700 transition">全員に共有して保存</button>
+                <button onClick={() => setShowTemplateSettings(false)} className="w-full mt-2 py-2 bg-gray-200 rounded font-bold text-sm">キャンセル</button>
               </div>
             </div>
           )}
 
+          {/* API設定モーダル（共有） */}
           {showSettings && (
             <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-              <div className="bg-white p-6 rounded-xl w-80 shadow-2xl">
-                <h3 className="font-bold mb-4">API設定</h3>
-                <label className="text-xs font-bold text-gray-600">Gemini API Key</label>
-                <input type="password" placeholder="APIキーを入力" value={apiKey} onChange={(e) => {setApiKey(e.target.value); localStorage.setItem('gemini_api_key', e.target.value);}} className="w-full p-2 border rounded mb-3 text-sm" />
-                <label className="text-xs font-bold text-gray-600">モデル名</label>
-                <input type="text" placeholder="例: gemini-1.5-flash" value={modelName} onChange={(e) => {setModelName(e.target.value); localStorage.setItem('gemini_model_name', e.target.value);}} className="w-full p-2 border rounded mb-4 text-sm" />
-                <p className="text-[10px] text-gray-400 mb-4">例: gemini-1.5-flash / gemini-1.5-pro / gemini-2.0-flash</p>
-                <button onClick={() => setShowSettings(false)} className="w-full py-2 bg-orange-600 text-white rounded font-bold">閉じる</button>
+              <div className="bg-white p-6 rounded-xl w-96 shadow-2xl">
+                <h3 className="font-bold mb-4 border-b pb-2 text-orange-800">⚙️ API設定<span className="text-xs text-gray-500 block">※ここで保存すると、他の先生もAIを使えるようになります</span></h3>
+                <div className="mb-4">
+                  <label className="text-xs font-bold text-gray-700 block mb-1">新しいGemini API Key</label>
+                  <input 
+                    type="password" 
+                    placeholder="AIzaSy..." 
+                    value={apiKey} 
+                    onChange={(e) => setApiKey(e.target.value)} 
+                    className="w-full p-2 border rounded text-sm focus:ring-2 focus:ring-orange-400 outline-none" 
+                  />
+                </div>
+                <button onClick={saveApiSettings} className="w-full py-2 bg-orange-600 text-white rounded font-bold hover:bg-orange-700 transition">全員に共有して保存</button>
+                <button onClick={() => setShowSettings(false)} className="w-full mt-2 py-2 bg-gray-200 rounded font-bold text-sm">キャンセル</button>
               </div>
             </div>
           )}
+
         </div>
       );
     }
