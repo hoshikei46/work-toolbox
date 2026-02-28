@@ -188,6 +188,17 @@
         reader.readAsText(file);
       };
 
+      // 消去処理
+      const clearData = async () => {
+        if (!window.confirm(`${formatDate(date)} の内容をすべて消去しますか？\nこの操作は元に戻せません。`)) return;
+        setMenu(''); setThemes(['', '', '']); setMemo(''); setRubyMenu(''); setRubyMemo('');
+        try {
+          await db.collection("lunch_newsletters").doc(date).delete();
+        } catch (e) {
+          // ローカルのみ消去でも続行
+        }
+      };
+
       // 保存処理（silent=trueの場合はアラートなし）
       const saveToFirebase = async (silent = false) => {
         setIsSaving(true);
@@ -346,6 +357,9 @@
                       {isSaving ? '保存中...' : '🖨️ 印刷'}
                     </button>
                   </div>
+                  <button onClick={clearData} className="w-full py-2 bg-red-100 text-red-600 border border-red-300 rounded font-bold text-sm hover:bg-red-200">
+                    🗑️ この日の内容を消去
+                  </button>
                   <p className="text-[10px] text-gray-400 text-center">※ 印刷時はクラウドへ自動保存されます</p>
                 </div>
               </div>
