@@ -119,6 +119,12 @@
       const [aiOptions, setAiOptions] = useState([]);
       const [showOptionsModal, setShowOptionsModal] = useState(false);
       const [activeTab, setActiveTab] = useState('edit');
+      const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+      useEffect(() => {
+        const handleResize = () => setIsMobile(window.innerWidth < 768);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+      }, []);
 
       useEffect(() => {
         const storedKey = localStorage.getItem('gemini_api_key');
@@ -286,7 +292,12 @@
           <main style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
             {/* 編集パネル（PC:50% / スマホ:タブ切替） */}
             <section
-              style={{ width: '50%', overflowY: 'auto', borderRight: '1px solid #e5e7eb', display: window.innerWidth < 768 && activeTab === 'preview' ? 'none' : 'block' }}
+              style={{
+                width: isMobile ? '100%' : '50%',
+                overflowY: 'auto',
+                borderRight: '1px solid #e5e7eb',
+                display: isMobile && activeTab === 'preview' ? 'none' : 'block'
+              }}
               className="bg-white p-5 shadow-inner" 
             >
               <div className="space-y-4">
@@ -342,7 +353,11 @@
 
             {/* プレビュー画面（PC:50% / スマホ:タブ切替） */}
             <section
-              style={{ width: '50%', overflowY: 'auto', display: window.innerWidth < 768 && activeTab === 'edit' ? 'none' : 'flex' }}
+              style={{
+                width: isMobile ? '100%' : '50%',
+                overflowY: 'auto',
+                display: isMobile && activeTab === 'edit' ? 'none' : 'flex'
+              }}
               className="preview-container" 
             >
               <div id="printable-area" style={{ '--font-size': `${fontSize}pt` }}>
