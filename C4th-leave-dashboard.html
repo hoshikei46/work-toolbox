@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>C4th休暇取得状況確認</title>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+  <style>
+    @media print {
+      .no-print { display: none !important; }
+      body { background-color: white !important; }
+      .print-shadow-none { box-shadow: none !important; border: none !important; }
+      table { color: #000 !important; }
+    }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans min-h-screen">
+
+  <header class="bg-emerald-700 text-white p-4 shadow-md no-print">
+    <div class="max-w-7xl mx-auto flex items-center gap-3">
+      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+      <h1 class="text-xl font-bold tracking-wide">C4th休暇取得状況確認 ダッシュボード</h1>
+    </div>
+  </header>
+
+  <main class="p-4 sm:p-6 max-w-7xl mx-auto">
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      
+      <div class="lg:col-span-1 space-y-6 no-print">
+        <div class="bg-white p-5 rounded-lg shadow-sm border border-emerald-100">
+          <h2 class="flex items-center gap-2 mb-3 text-emerald-800 font-semibold">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+            データ取り込み
+          </h2>
+          <p class="text-xs text-gray-500 mb-3">
+            C4thのデータをコピーして貼り付けてください。
+          </p>
+          <textarea id="inputText" placeholder="ここへ貼り付け..." class="w-full h-40 p-2 text-sm border rounded bg-gray-50 focus:outline-none focus:ring-2 focus:ring-emerald-500 mb-3 resize-y"></textarea>
+          <button id="saveBtn" class="w-full flex justify-center items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-2 px-4 rounded transition-colors">
+            データを読み込む
+          </button>
+          <!-- デバッグ情報表示エリア -->
+          <div id="debugInfo" class="mt-3 p-2 bg-gray-100 rounded text-xs text-gray-600 hidden"></div>
+        </div>
+      </div>
+
+      <div class="lg:col-span-3 space-y-4">
+        
+        <div class="bg-white p-5 rounded-lg shadow-sm border border-emerald-100 print-shadow-none">
+          <h2 class="flex items-center gap-2 mb-4 text-emerald-800 font-semibold no-print">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg>
+            絞り込み・表示設定
+          </h2>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end no-print">
+            <div>
+              <label class="block text-xs text-gray-600 mb-1">職員名</label>
+              <select id="filterName" class="w-full p-2 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
+                <option value="">すべて</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs text-gray-600 mb-1">開始日</label>
+              <input type="date" id="filterStartDate" class="w-full p-2 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+            </div>
+            <div>
+              <label class="block text-xs text-gray-600 mb-1">終了日</label>
+              <input type="date" id="filterEndDate" class="w-full p-2 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+            </div>
+          </div>
+
+          <div class="flex flex-wrap gap-3 mt-4 pt-4 border-t border-gray-100 justify-end no-print">
+            <button id="exportBtn" class="flex items-center gap-2 bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 py-2 px-4 rounded text-sm font-medium transition-colors">
+              Excelに出力
+            </button>
+            <button id="printBtn" class="flex items-center gap-2 bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200 py-2 px-4 rounded text-sm font-medium transition-colors">
+              表を印刷する
+            </button>
+          </div>
+
+          <div class="hidden print:block mb-4">
+            <h2 class="text-xl font-bold mb-2">休暇取得状況</h2>
+            <div id="printConditions" class="text-sm text-gray-600"></div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm border border-emerald-100 overflow-hidden print-shadow-none">
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left border-collapse">
+              <thead class="bg-emerald-50 text-emerald-800 border-b-2 border-emerald-200 select-none">
+                <tr>
+                  <th class="p-3 font-semibold whitespace-nowrap cursor-pointer hover:bg-emerald-100 transition-colors" data-sort="applicant" title="クリックで並べ替え">
+                    申請者 <span class="sort-icon text-emerald-600 ml-1">▲</span>
+                  </th>
+                  <th class="p-3 font-semibold whitespace-nowrap cursor-pointer hover:bg-emerald-100 transition-colors" data-sort="leaveType" title="クリックで並べ替え">
+                    種類 <span class="sort-icon text-emerald-600 ml-1"></span>
+                  </th>
+                  <th class="p-3 font-semibold min-w-[200px] cursor-pointer hover:bg-emerald-100 transition-colors" data-sort="period" title="クリックで並べ替え">
+                    取得期間 <span class="sort-icon text-emerald-600 ml-1"></span>
+                  </th>
+                  <th class="p-3 font-semibold whitespace-nowrap">日数/時間</th>
+                  <th class="p-3 font-semibold whitespace-nowrap cursor-pointer hover:bg-emerald-100 transition-colors" data-sort="status" title="クリックで並べ替え">
+                    状況 <span class="sort-icon text-emerald-600 ml-1"></span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody id="tableBody">
+                <tr>
+                  <td colspan="5" class="p-8 text-center text-gray-500 border-t border-gray-100">
+                    データを貼り付けて「データを読み込む」をクリックしてください。
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="bg-gray-50 p-3 border-t text-xs text-gray-500 text-right no-print" id="recordCount">
+            全 0 件
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <script>
+    let rawData = [];
+    let filteredData = [];
+    let sortKey = 'applicant'; 
+    let sortAsc = true;
+
+    const inputText = document.getElementById('inputText');
+    const saveBtn = document.getElementById('saveBtn');
+    const filterName = document.getElementById('filterName');
+    const filterStartDate = document.getElementById('filterStartDate');
+    const filterEndDate = document.getElementById('filterEndDate');
+    const tableBody = document.getElementById('tableBody');
+    const recordCount = document.getElementById('recordCount');
+    const exportBtn = document.getElementById('exportBtn');
+    const printBtn = document.getElementById('printBtn');
+    const printConditions = document.getElementById('printConditions');
+    const debugInfo = document.getElementById('debugInfo');
+
+    function getStartDate(periodStr) {
+      if (!periodStr) return new Date(0);
+      const match = periodStr.match(/(\d{4}\/\d{1,2}\/\d{1,2})/);
+      return match ? new Date(match[1]) : new Date(0);
+    }
+
+    function escapeHTML(str) {
+      if (!str) return "";
+      return str.replace(/[&<>'"]/g, tag => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+      }[tag] || tag));
+    }
+
+    /**
+     * C4th TSVデータをパースする。
+     * 列構造（固定）:
+     *   cols[0]: No.
+     *   cols[1]: 申請者（承認者）
+     *   cols[2]: 申請日
+     *   cols[3]: 種類
+     *   cols[4]: 取得期間
+     *   cols[5]: 空欄
+     *   cols[6]: 取得日数
+     *   cols[7]: 取得時間数変更フラグ
+     *   cols[8]: 取得事由（備考）
+     *   cols[9]: 状況（承認済/申請中/差戻/取下）
+     *   cols[10]: 詳細ボタン等
+     *
+     * 特殊ケース:
+     *   (A) 備考が改行されて2行に分かれ、ステータスが次行の先頭近くに来る
+     *       → 次行を「続き行」として前行とマージして処理
+     *   (B) 訂正申請の重複行（No.なし・申請者名のみ先頭・ステータスなし）
+     *       → スキップ
+     */
+    function parseTSV(text) {
+      const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim().split('\n');
+      const parsed = [];
+      const debugLines = [];
+      const STATUS_WORDS = ["承認済", "申請中", "差戻", "取下"];
+
+      function findStatus(cols) {
+        for (let j = cols.length - 1; j >= 0; j--) {
+          for (const sw of STATUS_WORDS) {
+            if (cols[j].includes(sw)) return sw;
+          }
+        }
+        return "";
+      }
+
+      function parseCols(cols) {
+        // 固定インデックスで各フィールドを取得
+        const applicantRaw = cols[1] || "";
+        const applicant = applicantRaw.replace(/\(.*?\)/g, '').replace(/（.*?）/g, '').trim();
+        // 種類: 括弧前を取得
+        const leaveType = (cols[3] || "").split('（')[0].split('(')[0].trim();
+        // 取得期間: 日付部分のみ抽出
+        const periodRaw = cols[4] || "";
+        const dates = periodRaw.match(/\d{4}\/\d{1,2}\/\d{1,2}/g) || [];
+        const leavePeriod = dates.length > 1
+          ? dates[0] + ' 〜 ' + dates[dates.length - 1]
+          : (dates[0] || periodRaw.split('\t')[0].trim());
+        // 日数: cols[6]
+        const leaveDays = (cols[6] || "").trim();
+        return { applicant, leaveType, leavePeriod, leaveDays };
+      }
+
+      let pendingCols = null; // ステータスなし本体行を一時保存
+
+      for (let i = 0; i < lines.length; i++) {
+        const raw = lines[i];
+        if (!raw.trim()) { pendingCols = null; continue; }
+
+        // ヘッダー行スキップ
+        if (raw.startsWith('No.') || raw.includes('休暇等取得者')) { pendingCols = null; continue; }
+
+        const cols = raw.split('\t').map(s => s.replace(/^["']+|["']+$/g, '').trim());
+        const status = findStatus(cols);
+        const isNoRow = /^\d+$/.test(cols[0]); // cols[0]が数字 = 本体行
+
+        // ケース(B): 訂正申請重複行
+        // No.なし・ステータスなし・cols[1]が日付（申請者名の次が日付）
+        // → 完全にスキップ
+        if (!isNoRow && !status) {
+          // 本体行らしい（日付を含む）なら次行続きのために保存
+          if (/\d{4}\/\d{1,2}\/\d{1,2}/.test(raw) && isNoRow === false) {
+            // No.なしで日付を含む行は重複行なのでスキップ
+          }
+          pendingCols = null;
+          continue;
+        }
+
+        // ケース(A): ステータスあり、cols数が少なく日付なし = 前行の続き行
+        const hasDate = /\d{4}\/\d{1,2}\/\d{1,2}/.test(raw);
+        if (!isNoRow && status && !hasDate && cols.length <= 5 && pendingCols) {
+          // 前行(pendingCols)を本体として使い、ステータスだけ今の行から取る
+          const f = parseCols(pendingCols);
+          debugLines.push(`[行${i+1}続き] ${f.applicant} / ${f.leaveType} / ${f.leavePeriod} / ${f.leaveDays} / ${status}`);
+          if (f.applicant && f.leaveType) {
+            parsed.push({ ...f, status });
+          }
+          pendingCols = null;
+          continue;
+        }
+
+        // 通常本体行: No.あり
+        if (isNoRow) {
+          if (!status) {
+            // ステータスなし → 次行に続く可能性あり
+            pendingCols = cols;
+            continue;
+          }
+          // ステータスあり → 1行完結
+          pendingCols = null;
+          const f = parseCols(cols);
+          debugLines.push(`[行${i+1}] ${f.applicant} / ${f.leaveType} / ${f.leavePeriod} / ${f.leaveDays} / ${status}`);
+          if (f.applicant && f.leaveType) {
+            parsed.push({ ...f, status });
+          }
+          continue;
+        }
+
+        // その他はスキップ
+        pendingCols = null;
+      }
+
+      // デバッグ情報を表示
+      if (debugLines.length > 0) {
+        debugInfo.classList.remove('hidden');
+        debugInfo.innerHTML = `<div class="font-semibold mb-1">解析ログ (${parsed.length}件取込)</div>` +
+          debugLines.slice(0, 30).map(l => `<div>${escapeHTML(l)}</div>`).join('') +
+          (debugLines.length > 30 ? `<div>…他 ${debugLines.length - 30} 行</div>` : '');
+      } else {
+        debugInfo.classList.add('hidden');
+      }
+
+      return parsed;
+    }
+
+    function updateEmployeeDropdown() {
+      const uniqueNames = [...new Set(rawData.map(d => d.applicant))].sort((a, b) => a.localeCompare(b, 'ja'));
+      filterName.innerHTML = '<option value="">すべて</option>';
+      uniqueNames.forEach(name => {
+        const option = document.createElement('option');
+        option.value = name;
+        option.textContent = name;
+        filterName.appendChild(option);
+      });
+    }
+
+    saveBtn.addEventListener('click', () => {
+      const text = inputText.value;
+      if (!text.trim()) {
+        alert("データを貼り付けてください。");
+        return;
+      }
+      rawData = parseTSV(text);
+      if (rawData.length === 0) {
+        alert("有効なデータが見つかりませんでした。\n\n【確認事項】\n・C4thの一覧画面からコピーしていますか？\n・「承認済」または「申請中」の列が含まれていますか？\n\nページ下部のデバッグログをご確認ください。");
+      }
+      inputText.value = "";
+      updateEmployeeDropdown();
+      updateTable();
+    });
+
+    document.querySelectorAll('th[data-sort]').forEach(th => {
+      th.addEventListener('click', () => {
+        const key = th.getAttribute('data-sort');
+        if (sortKey === key) {
+          sortAsc = !sortAsc;
+        } else {
+          sortKey = key;
+          sortAsc = true;
+        }
+        updateTable();
+      });
+    });
+
+    function updateTable() {
+      filteredData = [...rawData];
+
+      const nameVal = filterName.value;
+      if (nameVal) {
+        filteredData = filteredData.filter(d => d.applicant === nameVal);
+      }
+
+      if (filterStartDate.value) {
+        const start = new Date(filterStartDate.value);
+        start.setHours(0,0,0,0);
+        filteredData = filteredData.filter(d => getStartDate(d.leavePeriod) >= start);
+      }
+      if (filterEndDate.value) {
+        const end = new Date(filterEndDate.value);
+        end.setHours(23,59,59,999);
+        filteredData = filteredData.filter(d => getStartDate(d.leavePeriod) <= end);
+      }
+
+      filteredData.sort((a, b) => {
+        let cmp1 = 0;
+        if (sortKey === 'applicant') {
+          cmp1 = a.applicant.localeCompare(b.applicant, 'ja');
+        } else if (sortKey === 'leaveType') {
+          cmp1 = a.leaveType.localeCompare(b.leaveType, 'ja');
+        } else if (sortKey === 'period') {
+          cmp1 = getStartDate(a.leavePeriod) - getStartDate(b.leavePeriod);
+        } else if (sortKey === 'status') {
+          cmp1 = a.status.localeCompare(b.status, 'ja');
+        }
+        
+        if (cmp1 !== 0) return sortAsc ? cmp1 : -cmp1;
+
+        let cmpApp = a.applicant.localeCompare(b.applicant, 'ja');
+        if (sortKey !== 'applicant' && cmpApp !== 0) return cmpApp;
+
+        let cmpType = a.leaveType.localeCompare(b.leaveType, 'ja');
+        if (sortKey !== 'leaveType' && cmpType !== 0) return cmpType;
+
+        let cmpPeriod = getStartDate(a.leavePeriod) - getStartDate(b.leavePeriod);
+        if (sortKey !== 'period' && cmpPeriod !== 0) return cmpPeriod;
+
+        return 0;
+      });
+
+      document.querySelectorAll('th[data-sort] .sort-icon').forEach(icon => icon.textContent = '');
+      const activeIcon = document.querySelector(`th[data-sort="${sortKey}"] .sort-icon`);
+      if (activeIcon) {
+        activeIcon.textContent = sortAsc ? '▲' : '▼';
+      }
+
+      if (filteredData.length === 0) {
+        tableBody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-gray-500 border-t border-gray-100">条件に一致するデータがありません。</td></tr>`;
+      } else {
+        tableBody.innerHTML = filteredData.map((row, index, arr) => {
+          const isNameChanged = index > 0 && row.applicant !== arr[index - 1].applicant;
+          const borderClass = isNameChanged 
+            ? "border-t-[3px] border-emerald-300 print:border-t-[3px] print:border-black" 
+            : "border-t border-gray-100 print:border-gray-300";
+
+          const statusColor = row.status === '申請中' ? 'text-orange-600 font-semibold' : 
+                              row.status === '差戻' ? 'text-red-600 font-semibold' : 'text-gray-600';
+
+          return `
+            <tr class="hover:bg-emerald-50/50 transition-colors ${borderClass}">
+              <td class="p-3 font-medium text-gray-800 whitespace-nowrap">${escapeHTML(row.applicant)}</td>
+              <td class="p-3 whitespace-nowrap"><span class="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs print:bg-transparent print:border print:border-gray-400">${escapeHTML(row.leaveType)}</span></td>
+              <td class="p-3 text-gray-600">${escapeHTML(row.leavePeriod)}</td>
+              <td class="p-3 text-gray-600 whitespace-nowrap">${escapeHTML(row.leaveDays)}</td>
+              <td class="p-3 ${statusColor} whitespace-nowrap">${escapeHTML(row.status)}</td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      recordCount.innerText = `全 ${filteredData.length} 件`;
+
+      let condText = [];
+      const nameVal2 = filterName.value;
+      if (nameVal2) condText.push(`対象: ${nameVal2}`);
+      if (filterStartDate.value || filterEndDate.value) {
+        condText.push(`期間: ${filterStartDate.value || "指定なし"} 〜 ${filterEndDate.value || "指定なし"}`);
+      }
+      printConditions.innerText = condText.join(' / ');
+    }
+
+    filterName.addEventListener('change', updateTable);
+    filterStartDate.addEventListener('change', updateTable);
+    filterEndDate.addEventListener('change', updateTable);
+    printBtn.addEventListener('click', () => window.print());
+
+    exportBtn.addEventListener('click', () => {
+      if (filteredData.length === 0) {
+        alert("出力するデータがありません。");
+        return;
+      }
+      const exportData = filteredData.map(d => ({
+        "申請者": d.applicant,
+        "休暇種類": d.leaveType,
+        "取得期間": d.leavePeriod,
+        "日数/時間": d.leaveDays,
+        "状況": d.status
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "休暇取得状況");
+      XLSX.writeFile(workbook, `休暇取得状況_${new Date().toISOString().split('T')[0]}.xlsx`);
+    });
+  </script>
+</body>
+</html>
