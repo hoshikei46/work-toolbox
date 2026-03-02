@@ -30,13 +30,44 @@
     <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
       
       <div class="lg:col-span-1 space-y-6 no-print">
+
+        <!-- 設定パネル -->
+        <div class="bg-white p-5 rounded-lg shadow-sm border border-emerald-100">
+          <button id="settingToggleBtn" class="w-full flex items-center justify-between text-emerald-800 font-semibold">
+            <span class="flex items-center gap-2">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+              設定
+            </span>
+            <svg id="settingChevron" class="w-4 h-4 text-gray-400 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+          </button>
+          <div id="settingPanel" class="hidden mt-4 space-y-4">
+            <p class="text-xs text-gray-500">「前後の日程を表示」ボタンで絞り込む範囲を設定します。</p>
+            <div class="flex items-center gap-2">
+              <label class="text-xs text-gray-600 w-14 shrink-0">前の日数</label>
+              <input type="number" id="settingBefore" min="0" max="60" value="4"
+                class="w-20 p-1.5 border rounded text-sm text-center focus:outline-none focus:ring-2 focus:ring-emerald-500">
+              <span class="text-xs text-gray-500">日前</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <label class="text-xs text-gray-600 w-14 shrink-0">後の日数</label>
+              <input type="number" id="settingAfter" min="0" max="60" value="4"
+                class="w-20 p-1.5 border rounded text-sm text-center focus:outline-none focus:ring-2 focus:ring-emerald-500">
+              <span class="text-xs text-gray-500">日後</span>
+            </div>
+            <button id="settingSaveBtn" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-1.5 px-3 rounded text-sm font-medium transition-colors">
+              保存する
+            </button>
+            <p id="settingSavedMsg" class="text-xs text-emerald-600 text-center hidden">✓ 保存しました</p>
+          </div>
+        </div>
+
         <div class="bg-white p-5 rounded-lg shadow-sm border border-emerald-100">
           <h2 class="flex items-center gap-2 mb-3 text-emerald-800 font-semibold">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
             データ取り込み
           </h2>
           <p class="text-xs text-gray-500 mb-3">
-            C4thのデータをコピーして貼り付けてください。
+            C4thの「申請情報」画面を開き、①「No.」の文字の左隣から右隣までドラッグして選択 → ②<kbd class="px-1 py-0.5 bg-gray-200 rounded text-gray-700">Ctrl</kbd>+<kbd class="px-1 py-0.5 bg-gray-200 rounded text-gray-700">Shift</kbd>+<kbd class="px-1 py-0.5 bg-gray-200 rounded text-gray-700">End</kbd> で表全体を選択 → ③<kbd class="px-1 py-0.5 bg-gray-200 rounded text-gray-700">Ctrl</kbd>+<kbd class="px-1 py-0.5 bg-gray-200 rounded text-gray-700">C</kbd> でコピー → ④下のテキストエリアに貼り付け
           </p>
           <textarea id="inputText" placeholder="ここへ貼り付け..." class="w-full h-40 p-2 text-sm border rounded bg-gray-50 focus:outline-none focus:ring-2 focus:ring-emerald-500 mb-3 resize-y"></textarea>
           <button id="saveBtn" class="w-full flex justify-center items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-2 px-4 rounded transition-colors">
@@ -72,13 +103,22 @@
             </div>
           </div>
 
-          <div class="flex flex-wrap gap-3 mt-4 pt-4 border-t border-gray-100 justify-end no-print">
-            <button id="exportBtn" class="flex items-center gap-2 bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 py-2 px-4 rounded text-sm font-medium transition-colors">
-              Excelに出力
-            </button>
-            <button id="printBtn" class="flex items-center gap-2 bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200 py-2 px-4 rounded text-sm font-medium transition-colors">
-              表を印刷する
-            </button>
+          <div class="mt-4 pt-4 border-t border-gray-100 no-print">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="text-xs text-gray-500 font-medium">よく使う絞り込み：</span>
+              <button id="quickRangeBtn" class="flex items-center gap-1 bg-emerald-500 hover:bg-emerald-600 text-white py-1.5 px-4 rounded text-sm font-medium transition-colors shadow-sm">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                前後の日程を表示（前4日〜後8日）
+              </button>
+            </div>
+            <div class="flex flex-wrap gap-3 justify-end">
+              <button id="exportBtn" class="flex items-center gap-2 bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 py-2 px-4 rounded text-sm font-medium transition-colors">
+                Excelに出力
+              </button>
+              <button id="printBtn" class="flex items-center gap-2 bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200 py-2 px-4 rounded text-sm font-medium transition-colors">
+                表を印刷する
+              </button>
+            </div>
           </div>
 
           <div class="hidden print:block mb-4">
@@ -130,6 +170,23 @@
     let filteredData = [];
     let sortKey = 'applicant'; 
     let sortAsc = true;
+    let quickRangeMode = false;
+
+    // 設定値（ページ内メモリで保持。デフォルト: 前4日・後4日）
+    const settings = { before: 4, after: 4 };
+
+    function toDateStr(d) {
+      if (!d || isNaN(d.getTime())) return '';
+      return d.getFullYear() + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + String(d.getDate()).padStart(2,'0');
+    }
+
+    function updateQuickRangeBtnLabel() {
+      const btn = document.getElementById('quickRangeBtn');
+      if (btn) btn.innerHTML = `
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+        前後の日程を表示（前${settings.before}日〜後${settings.after}日）
+      `;
+    }
 
     const inputText = document.getElementById('inputText');
     const saveBtn = document.getElementById('saveBtn');
@@ -339,31 +396,37 @@
         filteredData = filteredData.filter(d => getStartDate(d.leavePeriod) <= end);
       }
 
-      filteredData.sort((a, b) => {
-        let cmp1 = 0;
-        if (sortKey === 'applicant') {
-          cmp1 = a.applicant.localeCompare(b.applicant, 'ja');
-        } else if (sortKey === 'leaveType') {
-          cmp1 = a.leaveType.localeCompare(b.leaveType, 'ja');
-        } else if (sortKey === 'period') {
-          cmp1 = getStartDate(a.leavePeriod) - getStartDate(b.leavePeriod);
-        } else if (sortKey === 'status') {
-          cmp1 = a.status.localeCompare(b.status, 'ja');
-        }
-        
-        if (cmp1 !== 0) return sortAsc ? cmp1 : -cmp1;
-
-        let cmpApp = a.applicant.localeCompare(b.applicant, 'ja');
-        if (sortKey !== 'applicant' && cmpApp !== 0) return cmpApp;
-
-        let cmpType = a.leaveType.localeCompare(b.leaveType, 'ja');
-        if (sortKey !== 'leaveType' && cmpType !== 0) return cmpType;
-
-        let cmpPeriod = getStartDate(a.leavePeriod) - getStartDate(b.leavePeriod);
-        if (sortKey !== 'period' && cmpPeriod !== 0) return cmpPeriod;
-
-        return 0;
-      });
+      // 直近表示モード中は「取得期間→申請者→種類」固定ソート
+      if (quickRangeMode) {
+        filteredData.sort((a, b) => {
+          const cmpPeriod = getStartDate(a.leavePeriod) - getStartDate(b.leavePeriod);
+          if (cmpPeriod !== 0) return cmpPeriod;
+          const cmpApp = a.applicant.localeCompare(b.applicant, 'ja');
+          if (cmpApp !== 0) return cmpApp;
+          return a.leaveType.localeCompare(b.leaveType, 'ja');
+        });
+      } else {
+        filteredData.sort((a, b) => {
+          let cmp1 = 0;
+          if (sortKey === 'applicant') {
+            cmp1 = a.applicant.localeCompare(b.applicant, 'ja');
+          } else if (sortKey === 'leaveType') {
+            cmp1 = a.leaveType.localeCompare(b.leaveType, 'ja');
+          } else if (sortKey === 'period') {
+            cmp1 = getStartDate(a.leavePeriod) - getStartDate(b.leavePeriod);
+          } else if (sortKey === 'status') {
+            cmp1 = a.status.localeCompare(b.status, 'ja');
+          }
+          if (cmp1 !== 0) return sortAsc ? cmp1 : -cmp1;
+          let cmpApp = a.applicant.localeCompare(b.applicant, 'ja');
+          if (sortKey !== 'applicant' && cmpApp !== 0) return cmpApp;
+          let cmpType = a.leaveType.localeCompare(b.leaveType, 'ja');
+          if (sortKey !== 'leaveType' && cmpType !== 0) return cmpType;
+          let cmpPeriod = getStartDate(a.leavePeriod) - getStartDate(b.leavePeriod);
+          if (sortKey !== 'period' && cmpPeriod !== 0) return cmpPeriod;
+          return 0;
+        });
+      }
 
       document.querySelectorAll('th[data-sort] .sort-icon').forEach(icon => icon.textContent = '');
       const activeIcon = document.querySelector(`th[data-sort="${sortKey}"] .sort-icon`);
@@ -374,21 +437,34 @@
       if (filteredData.length === 0) {
         tableBody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-gray-500 border-t border-gray-100">条件に一致するデータがありません。</td></tr>`;
       } else {
+        const todayStr = toDateStr(new Date());
         tableBody.innerHTML = filteredData.map((row, index, arr) => {
-          const isNameChanged = index > 0 && row.applicant !== arr[index - 1].applicant;
-          const borderClass = isNameChanged 
-            ? "border-t-[3px] border-emerald-300 print:border-t-[3px] print:border-black" 
+          // 直近表示モード：日付が変わる行に太線 / 通常モード：申請者が変わる行に太線
+          const isSeparator = quickRangeMode
+            ? index > 0 && toDateStr(getStartDate(row.leavePeriod)) !== toDateStr(getStartDate(arr[index - 1].leavePeriod))
+            : index > 0 && row.applicant !== arr[index - 1].applicant;
+          const borderClass = isSeparator
+            ? "border-t-[3px] border-emerald-300 print:border-t-[3px] print:border-black"
             : "border-t border-gray-100 print:border-gray-300";
 
+          // 今日の行かどうか判定
+          const rowDateStr = toDateStr(getStartDate(row.leavePeriod));
+          const isToday = rowDateStr === todayStr;
+          const rowBg = isToday ? 'bg-amber-100' : 'hover:bg-emerald-50/50';
+          const todayBadge = isToday ? '<span style="font-size:10px" class="ml-1 px-1.5 py-0.5 bg-amber-500 text-white rounded font-bold">今日</span>' : '';
+
           const statusColor = row.status === '申請中' ? 'text-orange-600 font-semibold' : 
-                              row.status === '差戻' ? 'text-red-600 font-semibold' : 'text-gray-600';
+                              row.status === '差戻' ? 'text-red-600 font-semibold' : 
+                              isToday ? 'text-gray-700' : 'text-gray-600';
+
+          const textBase = isToday ? 'text-gray-800 font-semibold' : 'text-gray-600';
 
           return `
-            <tr class="hover:bg-emerald-50/50 transition-colors ${borderClass}">
-              <td class="p-3 font-medium text-gray-800 whitespace-nowrap">${escapeHTML(row.applicant)}</td>
-              <td class="p-3 whitespace-nowrap"><span class="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs print:bg-transparent print:border print:border-gray-400">${escapeHTML(row.leaveType)}</span></td>
-              <td class="p-3 text-gray-600">${escapeHTML(row.leavePeriod)}</td>
-              <td class="p-3 text-gray-600 whitespace-nowrap">${escapeHTML(row.leaveDays)}</td>
+            <tr class="transition-colors ${rowBg} ${borderClass}">
+              <td class="p-3 font-medium ${isToday ? 'text-gray-900 font-bold' : 'text-gray-800'} whitespace-nowrap">${escapeHTML(row.applicant)}</td>
+              <td class="p-3 whitespace-nowrap"><span class="px-2 py-1 ${isToday ? 'bg-amber-200 text-amber-900' : 'bg-green-100 text-green-800'} rounded-full text-xs print:bg-transparent print:border print:border-gray-400">${escapeHTML(row.leaveType)}</span></td>
+              <td class="p-3 ${textBase} whitespace-nowrap">${escapeHTML(row.leavePeriod)}${todayBadge}</td>
+              <td class="p-3 ${textBase} whitespace-nowrap">${escapeHTML(row.leaveDays)}</td>
               <td class="p-3 ${statusColor} whitespace-nowrap">${escapeHTML(row.status)}</td>
             </tr>
           `;
@@ -406,10 +482,45 @@
       printConditions.innerText = condText.join(' / ');
     }
 
-    filterName.addEventListener('change', updateTable);
-    filterStartDate.addEventListener('change', updateTable);
-    filterEndDate.addEventListener('change', updateTable);
+    filterName.addEventListener('change', () => { quickRangeMode = false; updateTable(); });
+    filterStartDate.addEventListener('change', () => { quickRangeMode = false; updateTable(); });
+    filterEndDate.addEventListener('change', () => { quickRangeMode = false; updateTable(); });
     printBtn.addEventListener('click', () => window.print());
+
+    document.getElementById('quickRangeBtn').addEventListener('click', () => {
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      const start = new Date(today); start.setDate(today.getDate() - settings.before);
+      const end   = new Date(today); end.setDate(today.getDate() + settings.after);
+      filterStartDate.value = start.toISOString().split('T')[0];
+      filterEndDate.value   = end.toISOString().split('T')[0];
+      quickRangeMode = true;
+      updateTable();
+    });
+
+    // 設定パネル：開閉
+    document.getElementById('settingToggleBtn').addEventListener('click', () => {
+      const panel = document.getElementById('settingPanel');
+      const chevron = document.getElementById('settingChevron');
+      const isHidden = panel.classList.toggle('hidden');
+      chevron.style.transform = isHidden ? '' : 'rotate(180deg)';
+    });
+
+    // 設定パネル：保存
+    document.getElementById('settingSaveBtn').addEventListener('click', () => {
+      const before = parseInt(document.getElementById('settingBefore').value, 10);
+      const after  = parseInt(document.getElementById('settingAfter').value, 10);
+      if (isNaN(before) || isNaN(after) || before < 0 || after < 0) {
+        alert('0以上の数値を入力してください。');
+        return;
+      }
+      settings.before = before;
+      settings.after  = after;
+      updateQuickRangeBtnLabel();
+      const msg = document.getElementById('settingSavedMsg');
+      msg.classList.remove('hidden');
+      setTimeout(() => msg.classList.add('hidden'), 2000);
+    });
 
     exportBtn.addEventListener('click', () => {
       if (filteredData.length === 0) {
@@ -429,6 +540,8 @@
       XLSX.utils.book_append_sheet(workbook, worksheet, "休暇取得状況");
       XLSX.writeFile(workbook, `休暇取得状況_${new Date().toISOString().split('T')[0]}.xlsx`);
     });
+    // 初期化
+    updateQuickRangeBtnLabel();
   </script>
 </body>
 </html>
