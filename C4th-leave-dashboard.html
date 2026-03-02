@@ -439,12 +439,9 @@
       } else {
         const todayStr = toDateStr(new Date());
         tableBody.innerHTML = filteredData.map((row, index, arr) => {
-          // 直近表示モード：日付が変わる行に太線 / 通常モード：申請者が変わる行に太線
-          const isSeparator = quickRangeMode
-            ? index > 0 && toDateStr(getStartDate(row.leavePeriod)) !== toDateStr(getStartDate(arr[index - 1].leavePeriod))
-            : index > 0 && row.applicant !== arr[index - 1].applicant;
-          const borderClass = isSeparator
-            ? "border-t-[3px] border-emerald-300 print:border-t-[3px] print:border-black"
+          const isNameChanged = index > 0 && row.applicant !== arr[index - 1].applicant;
+          const borderClass = isNameChanged 
+            ? "border-t-[3px] border-emerald-300 print:border-t-[3px] print:border-black" 
             : "border-t border-gray-100 print:border-gray-300";
 
           // 今日の行かどうか判定
