@@ -13,6 +13,9 @@
       .print-shadow-none { box-shadow: none !important; border: none !important; }
       table { color: #000 !important; }
     }
+    .col-order-item { touch-action: none; }
+    .col-order-item.dragging { opacity: 0.4; }
+    .col-order-item.drag-over { border-top: 2px solid #059669; }
   </style>
 </head>
 <body class="bg-gray-50 text-gray-800 font-sans min-h-screen">
@@ -57,34 +60,10 @@
             <span class="text-xs text-gray-500">日後</span>
           </div>
 
-          <!-- 表示列 -->
-          <p class="text-xs text-gray-500 font-semibold border-b pb-1 pt-2">表示する列</p>
-          <div class="space-y-1.5">
-            <label class="flex items-center gap-2 cursor-pointer select-none">
-              <input type="checkbox" id="colApplicant" checked class="rounded text-emerald-600">
-              <span class="text-xs text-gray-700">申請者</span>
-            </label>
-            <label class="flex items-center gap-2 cursor-pointer select-none">
-              <input type="checkbox" id="colLeaveType" checked class="rounded text-emerald-600">
-              <span class="text-xs text-gray-700">種類</span>
-            </label>
-            <label class="flex items-center gap-2 cursor-pointer select-none">
-              <input type="checkbox" id="colPeriod" checked class="rounded text-emerald-600">
-              <span class="text-xs text-gray-700">取得期間</span>
-            </label>
-            <label class="flex items-center gap-2 cursor-pointer select-none">
-              <input type="checkbox" id="colDays" checked class="rounded text-emerald-600">
-              <span class="text-xs text-gray-700">日数/時間</span>
-            </label>
-            <label class="flex items-center gap-2 cursor-pointer select-none">
-              <input type="checkbox" id="colRemark" class="rounded text-emerald-600">
-              <span class="text-xs text-gray-700">取得事由</span>
-            </label>
-            <label class="flex items-center gap-2 cursor-pointer select-none">
-              <input type="checkbox" id="colStatus" checked class="rounded text-emerald-600">
-              <span class="text-xs text-gray-700">状況</span>
-            </label>
-          </div>
+          <!-- 表示列・順序 -->
+          <p class="text-xs text-gray-500 font-semibold border-b pb-1 pt-2">表示する列／表示順</p>
+          <p class="text-xs text-gray-400">↑↓で順番を変更できます</p>
+          <div id="colOrderList" class="space-y-1"></div>
 
           <!-- 祝日CSV -->
           <p class="text-xs text-gray-500 font-semibold border-b pb-1 pt-2">祝日データ（内閣府CSV）</p>
@@ -129,12 +108,30 @@
           絞り込み・表示設定
         </h2>
 
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end no-print">
+        <!-- フィルタ行 -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end no-print">
           <div>
             <label class="block text-xs text-gray-600 mb-1">職員名</label>
             <select id="filterName" class="w-full p-2 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
               <option value="">すべて</option>
             </select>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-600 mb-1">種類</label>
+            <div class="relative">
+              <button id="leaveTypeFilterBtn" type="button"
+                class="w-full p-2 border rounded text-sm text-left bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 flex items-center justify-between gap-1">
+                <span id="leaveTypeFilterLabel" class="truncate text-gray-500">すべて</span>
+                <svg class="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+              </button>
+              <div id="leaveTypeDropdown" class="hidden absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded shadow-lg max-h-52 overflow-y-auto">
+                <label class="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100">
+                  <input type="checkbox" id="leaveTypeAll" checked class="rounded text-emerald-600">
+                  <span class="text-xs text-gray-700 font-medium">すべて選択/解除</span>
+                </label>
+                <div id="leaveTypeCheckList" class="py-1"></div>
+              </div>
+            </div>
           </div>
           <div>
             <label class="block text-xs text-gray-600 mb-1">開始日</label>
@@ -146,25 +143,92 @@
           </div>
         </div>
 
+        <!-- ボタン行1: クイックレンジ・展開トグル -->
         <div class="mt-4 pt-4 border-t border-gray-100 no-print">
           <div class="flex flex-wrap items-center gap-2 mb-3">
             <span class="text-xs text-gray-500 font-medium shrink-0">よく使う絞り込み：</span>
-
-            <!-- クイックレンジ -->
             <button id="quickRangeBtn" class="flex items-center gap-1 bg-emerald-500 hover:bg-emerald-600 text-white py-1.5 px-3 rounded text-sm font-medium transition-colors shadow-sm">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
               前後の日程を表示
             </button>
-
-            <!-- 展開トグル -->
             <button id="expandToggleBtn"
               class="flex items-center gap-1.5 py-1.5 px-3 rounded text-sm font-medium transition-colors border shadow-sm bg-white border-gray-300 text-gray-600 hover:bg-gray-50"
-              title="連続休暇（例：2/16〜2/20）を1日ずつに展開します">
+              title="連続休暇を1日ずつに展開します">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path></svg>
               <span id="expandToggleLabel">連続休暇：展開しない</span>
             </button>
           </div>
 
+          <!-- ソート優先順位UI -->
+          <div class="mb-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+            <p class="text-xs text-gray-500 font-semibold mb-2">並び替えの優先順位</p>
+            <div class="flex flex-wrap gap-2 items-end">
+              <!-- 第1キー -->
+              <div class="flex flex-col gap-1">
+                <span class="text-xs text-gray-400">第1</span>
+                <div class="flex gap-1">
+                  <select id="sortKey1" class="p-1.5 border rounded text-xs bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                    <option value="applicant">申請者</option>
+                    <option value="leaveType">種類</option>
+                    <option value="period">取得期間</option>
+                    <option value="days">日数/時間</option>
+                    <option value="remark">取得事由</option>
+                    <option value="status">状況</option>
+                  </select>
+                  <select id="sortDir1" class="p-1.5 border rounded text-xs bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                    <option value="asc">昇順</option>
+                    <option value="desc">降順</option>
+                  </select>
+                </div>
+              </div>
+              <span class="text-gray-300 text-sm mb-1">›</span>
+              <!-- 第2キー -->
+              <div class="flex flex-col gap-1">
+                <span class="text-xs text-gray-400">第2</span>
+                <div class="flex gap-1">
+                  <select id="sortKey2" class="p-1.5 border rounded text-xs bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                    <option value="">なし</option>
+                    <option value="applicant">申請者</option>
+                    <option value="leaveType">種類</option>
+                    <option value="period">取得期間</option>
+                    <option value="days">日数/時間</option>
+                    <option value="remark">取得事由</option>
+                    <option value="status">状況</option>
+                  </select>
+                  <select id="sortDir2" class="p-1.5 border rounded text-xs bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                    <option value="asc">昇順</option>
+                    <option value="desc">降順</option>
+                  </select>
+                </div>
+              </div>
+              <span class="text-gray-300 text-sm mb-1">›</span>
+              <!-- 第3キー -->
+              <div class="flex flex-col gap-1">
+                <span class="text-xs text-gray-400">第3</span>
+                <div class="flex gap-1">
+                  <select id="sortKey3" class="p-1.5 border rounded text-xs bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                    <option value="">なし</option>
+                    <option value="applicant">申請者</option>
+                    <option value="leaveType">種類</option>
+                    <option value="period">取得期間</option>
+                    <option value="days">日数/時間</option>
+                    <option value="remark">取得事由</option>
+                    <option value="status">状況</option>
+                  </select>
+                  <select id="sortDir3" class="p-1.5 border rounded text-xs bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                    <option value="asc">昇順</option>
+                    <option value="desc">降順</option>
+                  </select>
+                </div>
+              </div>
+              <button id="applySortBtn" class="mb-0.5 flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white py-1.5 px-3 rounded text-xs font-medium transition-colors shadow-sm">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12"></path></svg>
+                並び替え実行
+              </button>
+            </div>
+          </div>
+
+          <!-- ボタン行2: Excel・印刷 -->
           <div class="flex flex-wrap gap-3 justify-end">
             <button id="exportBtn" class="flex items-center gap-2 bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 py-2 px-4 rounded text-sm font-medium transition-colors">
               Excelに出力
@@ -181,26 +245,12 @@
         </div>
       </div>
 
+      <!-- テーブル -->
       <div class="bg-white rounded-lg shadow-sm border border-emerald-100 overflow-hidden print-shadow-none">
         <div class="overflow-x-auto">
           <table class="w-full text-sm text-left border-collapse">
-            <thead class="bg-emerald-50 text-emerald-800 border-b-2 border-emerald-200 select-none">
-              <tr>
-                <th class="p-3 font-semibold whitespace-nowrap cursor-pointer hover:bg-emerald-100 transition-colors th-applicant" data-sort="applicant">
-                  申請者 <span class="sort-icon text-emerald-600 ml-1">▲</span>
-                </th>
-                <th class="p-3 font-semibold whitespace-nowrap cursor-pointer hover:bg-emerald-100 transition-colors th-leaveType" data-sort="leaveType">
-                  種類 <span class="sort-icon text-emerald-600 ml-1"></span>
-                </th>
-                <th class="p-3 font-semibold min-w-[200px] cursor-pointer hover:bg-emerald-100 transition-colors th-period" data-sort="period">
-                  取得期間 <span class="sort-icon text-emerald-600 ml-1"></span>
-                </th>
-                <th class="p-3 font-semibold whitespace-nowrap th-days">日数/時間</th>
-                <th class="p-3 font-semibold min-w-[160px] th-remark hidden">取得事由</th>
-                <th class="p-3 font-semibold whitespace-nowrap cursor-pointer hover:bg-emerald-100 transition-colors th-status" data-sort="status">
-                  状況 <span class="sort-icon text-emerald-600 ml-1"></span>
-                </th>
-              </tr>
+            <thead id="tableHead" class="bg-emerald-50 text-emerald-800 border-b-2 border-emerald-200 select-none">
+              <tr id="tableHeaderRow"></tr>
             </thead>
             <tbody id="tableBody">
               <tr>
@@ -218,15 +268,33 @@
 
 <script>
   // =============================================
+  // 列定義（表示順・表示/非表示の基準）
+  // =============================================
+  const COL_DEFS = [
+    { id: 'applicant', label: '申請者',   sortable: true,  defaultOn: true  },
+    { id: 'leaveType', label: '種類',     sortable: true,  defaultOn: true  },
+    { id: 'period',    label: '取得期間', sortable: true,  defaultOn: true  },
+    { id: 'days',      label: '日数/時間',sortable: false, defaultOn: true  },
+    { id: 'remark',    label: '取得事由', sortable: false, defaultOn: false },
+    { id: 'status',    label: '状況',     sortable: true,  defaultOn: true  },
+  ];
+
+  // colOrder: COL_DEFS の id を並べた配列（表示順）
+  let colOrder   = COL_DEFS.map(c => c.id);
+  // colVisible: id -> boolean
+  let colVisible = Object.fromEntries(COL_DEFS.map(c => [c.id, c.defaultOn]));
+
+  // =============================================
   // 状態
   // =============================================
-  let rawData     = [];
+  let rawData      = [];
   let filteredData = [];
-  let sortKey     = 'applicant';
-  let sortAsc     = true;
   let quickRangeMode = false;
-  let expandMode  = false;
-  let holidaySet  = new Set();   // "YYYY/MM/DD"
+  let expandMode   = false;
+  let holidaySet   = new Set();
+
+  // 多段ソート状態 [{key, dir}]
+  let sortConfig = [{ key: 'applicant', dir: 'asc' }];
 
   const settings = { before: 4, after: 4 };
 
@@ -238,11 +306,10 @@
       const s = JSON.parse(localStorage.getItem('c4th_settings') || '{}');
       if (s.before != null) { settings.before = s.before; document.getElementById('settingBefore').value = s.before; }
       if (s.after  != null) { settings.after  = s.after;  document.getElementById('settingAfter').value  = s.after;  }
-      ['colApplicant','colLeaveType','colPeriod','colDays','colRemark','colStatus'].forEach(id => {
-        if (s[id] != null) document.getElementById(id).checked = s[id];
-      });
+      if (Array.isArray(s.colOrder))   colOrder   = s.colOrder;
+      if (s.colVisible)                colVisible  = { ...colVisible, ...s.colVisible };
+      if (Array.isArray(s.sortConfig)) sortConfig  = s.sortConfig;
     } catch(e) {}
-
     try {
       const hd = localStorage.getItem('c4th_holidays');
       if (hd) { holidaySet = new Set(JSON.parse(hd)); updateHolidayStatus(); }
@@ -251,11 +318,10 @@
 
   function persistSettings() {
     try {
-      const obj = { before: settings.before, after: settings.after };
-      ['colApplicant','colLeaveType','colPeriod','colDays','colRemark','colStatus'].forEach(id => {
-        obj[id] = document.getElementById(id).checked;
-      });
-      localStorage.setItem('c4th_settings', JSON.stringify(obj));
+      localStorage.setItem('c4th_settings', JSON.stringify({
+        before: settings.before, after: settings.after,
+        colOrder, colVisible, sortConfig
+      }));
     } catch(e) {}
   }
 
@@ -296,7 +362,36 @@
   }
 
   // =============================================
-  // 連続休暇の展開
+  // ソート比較
+  // =============================================
+  function getColValue(row, key) {
+    if (key === 'applicant') return row.applicant || '';
+    if (key === 'leaveType') return row.leaveType || '';
+    if (key === 'period')    return getStartDate(row.leavePeriod);
+    if (key === 'days')      return row.leaveDays || '';
+    if (key === 'remark')    return row.remark || '';
+    if (key === 'status')    return row.status || '';
+    return '';
+  }
+
+  function compareRows(a, b, config) {
+    for (const { key, dir } of config) {
+      if (!key) continue;
+      const va = getColValue(a, key);
+      const vb = getColValue(b, key);
+      let cmp = 0;
+      if (va instanceof Date && vb instanceof Date) {
+        cmp = va - vb;
+      } else {
+        cmp = String(va).localeCompare(String(vb), 'ja');
+      }
+      if (cmp !== 0) return dir === 'asc' ? cmp : -cmp;
+    }
+    return 0;
+  }
+
+  // =============================================
+  // 連続休暇展開
   // =============================================
   function isRangeRow(row) {
     return /\d{4}\/\d{1,2}\/\d{1,2}\s*〜\s*\d{4}\/\d{1,2}\/\d{1,2}/.test(row.leavePeriod);
@@ -336,17 +431,20 @@
     }
 
     function parseCols(cols) {
-      const applicantRaw = cols[1] || '';
-      const applicant = applicantRaw.replace(/\(.*?\)/g,'').replace(/（.*?）/g,'').trim();
-      const leaveType = (cols[3] || '').split('（')[0].split('(')[0].trim();
+      const applicant = (cols[1] || '').replace(/\(.*?\)/g,'').replace(/（.*?）/g,'').trim();
+      const leaveTypeRaw = cols[3] || '';
+      const leaveType = (() => {
+        // 全角括弧が2つ以上ある場合は1つ目の（）を残す
+        const m = leaveTypeRaw.match(/^([^（]*（[^）]*）)/);
+        if (m && (leaveTypeRaw.match(/（/g) || []).length >= 2) return m[1].trim();
+        // それ以外は括弧の前まで
+        return leaveTypeRaw.split('（')[0].split('(')[0].trim();
+      })();
       const periodRaw = (cols[4] || '').trim().replace(/\s*（休憩時間[：:][^）]*）/g,'');
       const dates = periodRaw.match(/\d{4}\/\d{1,2}\/\d{1,2}/g) || [];
-      let leavePeriod;
-      if (dates.length > 1) {
-        leavePeriod = dates[0] + ' 〜 ' + dates[dates.length - 1];
-      } else {
-        leavePeriod = periodRaw || (dates[0] || '');
-      }
+      const leavePeriod = dates.length > 1
+        ? dates[0] + ' 〜 ' + dates[dates.length - 1]
+        : (periodRaw || (dates[0] || ''));
       const leaveDays = (cols[6] || '').trim();
       const remark    = (cols[8] || '').trim();
       return { applicant, leaveType, leavePeriod, leaveDays, remark };
@@ -357,22 +455,17 @@
       const raw = lines[i];
       if (!raw.trim()) { pendingCols = null; continue; }
       if (raw.startsWith('No.') || raw.includes('休暇等取得者')) { pendingCols = null; continue; }
-
       const cols = raw.split('\t').map(s => s.replace(/^["']+|["']+$/g,'').trim());
       const status  = findStatus(cols);
       const isNoRow = /^\d+$/.test(cols[0]);
-
       if (!isNoRow && !status) { pendingCols = null; continue; }
-
       const hasDate = /\d{4}\/\d{1,2}\/\d{1,2}/.test(raw);
       if (!isNoRow && status && !hasDate && cols.length <= 5 && pendingCols) {
         const f = parseCols(pendingCols);
         debugLines.push(`[行${i+1}続き] ${f.applicant} / ${f.leaveType} / ${f.leavePeriod}`);
         if (f.applicant && f.leaveType) parsed.push({ ...f, status });
-        pendingCols = null;
-        continue;
+        pendingCols = null; continue;
       }
-
       if (isNoRow) {
         if (!status) { pendingCols = cols; continue; }
         pendingCols = null;
@@ -397,8 +490,107 @@
   }
 
   // =============================================
-  // UI更新ヘルパー
+  // 設定パネル：列順序リスト描画
   // =============================================
+  function renderColOrderList() {
+    const list = document.getElementById('colOrderList');
+    list.innerHTML = '';
+    colOrder.forEach((id, idx) => {
+      const def = COL_DEFS.find(c => c.id === id);
+      if (!def) return;
+      const item = document.createElement('div');
+      item.className = 'col-order-item flex items-center gap-2 p-1.5 bg-gray-50 rounded border border-gray-200';
+      item.dataset.id = id;
+      item.innerHTML = `
+        <input type="checkbox" id="col_${id}" ${colVisible[id] ? 'checked' : ''} class="rounded text-emerald-600 shrink-0">
+        <span class="text-xs text-gray-700 flex-1 select-none">${def.label}</span>
+        <div class="flex flex-col gap-0">
+          <button class="move-up text-gray-400 hover:text-emerald-600 leading-none px-0.5 ${idx === 0 ? 'invisible' : ''}" data-idx="${idx}" title="上へ">▲</button>
+          <button class="move-down text-gray-400 hover:text-emerald-600 leading-none px-0.5 ${idx === colOrder.length - 1 ? 'invisible' : ''}" data-idx="${idx}" title="下へ">▼</button>
+        </div>
+      `;
+      // チェックボックス変更
+      item.querySelector(`#col_${id}`).addEventListener('change', (e) => {
+        colVisible[id] = e.target.checked;
+        renderTableHeader();
+        updateTable();
+      });
+      // 上へ
+      const upBtn = item.querySelector('.move-up');
+      if (upBtn) upBtn.addEventListener('click', () => {
+        if (idx === 0) return;
+        [colOrder[idx-1], colOrder[idx]] = [colOrder[idx], colOrder[idx-1]];
+        renderColOrderList();
+        renderTableHeader();
+        updateTable();
+      });
+      // 下へ
+      const downBtn = item.querySelector('.move-down');
+      if (downBtn) downBtn.addEventListener('click', () => {
+        if (idx === colOrder.length - 1) return;
+        [colOrder[idx], colOrder[idx+1]] = [colOrder[idx+1], colOrder[idx]];
+        renderColOrderList();
+        renderTableHeader();
+        updateTable();
+      });
+      list.appendChild(item);
+    });
+  }
+
+  // =============================================
+  // テーブルヘッダー描画
+  // =============================================
+  function renderTableHeader() {
+    const tr = document.getElementById('tableHeaderRow');
+    tr.innerHTML = '';
+    colOrder.forEach(id => {
+      if (!colVisible[id]) return;
+      const def = COL_DEFS.find(c => c.id === id);
+      if (!def) return;
+      const th = document.createElement('th');
+      th.className = `p-3 font-semibold whitespace-nowrap th-${id}` + (id === 'period' ? ' min-w-[200px]' : '') + (id === 'remark' ? ' min-w-[160px]' : '');
+      th.textContent = def.label;
+      tr.appendChild(th);
+    });
+  }
+
+  // =============================================
+  // ソートUIの同期
+  // =============================================
+  function syncSortUI() {
+    const keys = ['sortKey1','sortKey2','sortKey3'];
+    const dirs = ['sortDir1','sortDir2','sortDir3'];
+    sortConfig.forEach((sc, i) => {
+      document.getElementById(keys[i]).value = sc.key || '';
+      document.getElementById(dirs[i]).value = sc.dir || 'asc';
+    });
+    for (let i = sortConfig.length; i < 3; i++) {
+      document.getElementById(keys[i]).value = '';
+      document.getElementById(dirs[i]).value = 'asc';
+    }
+  }
+
+  function readSortUI() {
+    const cfg = [];
+    for (let i = 1; i <= 3; i++) {
+      const key = document.getElementById(`sortKey${i}`).value;
+      const dir = document.getElementById(`sortDir${i}`).value;
+      if (key) cfg.push({ key, dir });
+    }
+    return cfg.length > 0 ? cfg : [{ key: 'applicant', dir: 'asc' }];
+  }
+
+  // =============================================
+  // クイックレンジボタンラベル
+  // =============================================
+  function updateQuickRangeBtnLabel() {
+    const btn = document.getElementById('quickRangeBtn');
+    if (btn) btn.innerHTML = `
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+      前後の日程を表示（前${settings.before}日〜後${settings.after}日）
+    `;
+  }
+
   function updateExpandToggleBtn() {
     const btn   = document.getElementById('expandToggleBtn');
     const label = document.getElementById('expandToggleLabel');
@@ -409,29 +601,6 @@
       btn.className = 'flex items-center gap-1.5 py-1.5 px-3 rounded text-sm font-medium transition-colors border shadow-sm bg-white border-gray-300 text-gray-600 hover:bg-gray-50';
       label.textContent = '連続休暇：展開しない';
     }
-  }
-
-  function updateColumnVisibility() {
-    const map = {
-      colApplicant: 'th-applicant',
-      colLeaveType: 'th-leaveType',
-      colPeriod:    'th-period',
-      colDays:      'th-days',
-      colRemark:    'th-remark',
-      colStatus:    'th-status',
-    };
-    Object.entries(map).forEach(([cbId, cls]) => {
-      const show = document.getElementById(cbId).checked;
-      document.querySelectorAll('.' + cls).forEach(el => el.classList.toggle('hidden', !show));
-    });
-  }
-
-  function updateQuickRangeBtnLabel() {
-    const btn = document.getElementById('quickRangeBtn');
-    if (btn) btn.innerHTML = `
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-      前後の日程を表示（前${settings.before}日〜後${settings.after}日）
-    `;
   }
 
   // =============================================
@@ -457,6 +626,11 @@
     filteredData = base;
     const nameVal = filterName.value;
     if (nameVal) filteredData = filteredData.filter(d => d.applicant === nameVal);
+    // 種類フィルタ（選択されたもののみ表示）
+    const checkedTypes = getCheckedLeaveTypes();
+    if (checkedTypes !== null) {
+      filteredData = filteredData.filter(d => checkedTypes.has(d.leaveType));
+    }
     if (filterStartDate.value) {
       const s = new Date(filterStartDate.value); s.setHours(0,0,0,0);
       filteredData = filteredData.filter(d => getStartDate(d.leavePeriod) >= s);
@@ -468,45 +642,26 @@
 
     // ソート
     if (quickRangeMode) {
+      // クイックレンジは日付→申請者→種類固定
       filteredData.sort((a, b) => {
         const cp = getStartDate(a.leavePeriod) - getStartDate(b.leavePeriod); if (cp !== 0) return cp;
         const ca = a.applicant.localeCompare(b.applicant,'ja');               if (ca !== 0) return ca;
         return a.leaveType.localeCompare(b.leaveType,'ja');
       });
     } else {
-      filteredData.sort((a, b) => {
-        let cmp = 0;
-        if      (sortKey === 'applicant') cmp = a.applicant.localeCompare(b.applicant,'ja');
-        else if (sortKey === 'leaveType') cmp = a.leaveType.localeCompare(b.leaveType,'ja');
-        else if (sortKey === 'period')    cmp = getStartDate(a.leavePeriod) - getStartDate(b.leavePeriod);
-        else if (sortKey === 'status')    cmp = a.status.localeCompare(b.status,'ja');
-        if (cmp !== 0) return sortAsc ? cmp : -cmp;
-        const ca = a.applicant.localeCompare(b.applicant,'ja'); if (sortKey !== 'applicant' && ca !== 0) return ca;
-        const ct = a.leaveType.localeCompare(b.leaveType,'ja'); if (sortKey !== 'leaveType' && ct !== 0) return ct;
-        const cp = getStartDate(a.leavePeriod) - getStartDate(b.leavePeriod); if (sortKey !== 'period' && cp !== 0) return cp;
-        return 0;
-      });
+      filteredData.sort((a, b) => compareRows(a, b, sortConfig));
     }
 
-    // ソートアイコン
-    document.querySelectorAll('th[data-sort] .sort-icon').forEach(ic => ic.textContent = '');
-    const ai = document.querySelector(`th[data-sort="${sortKey}"] .sort-icon`);
-    if (ai) ai.textContent = sortAsc ? '▲' : '▼';
-
     // 描画
-    const todayStr      = toDateStr(new Date());
-    const showApplicant = document.getElementById('colApplicant').checked;
-    const showLeaveType = document.getElementById('colLeaveType').checked;
-    const showPeriod    = document.getElementById('colPeriod').checked;
-    const showDays      = document.getElementById('colDays').checked;
-    const showRemark    = document.getElementById('colRemark').checked;
-    const showStatus    = document.getElementById('colStatus').checked;
-    const colCount      = [showApplicant,showLeaveType,showPeriod,showDays,showRemark,showStatus].filter(Boolean).length;
+    const todayStr = toDateStr(new Date());
+    const visibleCols = colOrder.filter(id => colVisible[id]);
+    const colCount = visibleCols.length;
 
     if (filteredData.length === 0) {
       tableBody.innerHTML = `<tr><td colspan="${colCount}" class="p-8 text-center text-gray-500 border-t border-gray-100">条件に一致するデータがありません。</td></tr>`;
     } else {
       tableBody.innerHTML = filteredData.map((row, index, arr) => {
+        // セパレータ判定
         const isSeparator = quickRangeMode
           ? index > 0 && toDateStr(getStartDate(row.leavePeriod)) !== toDateStr(getStartDate(arr[index-1].leavePeriod))
           : index > 0 && row.applicant !== arr[index-1].applicant;
@@ -517,33 +672,36 @@
         const rowDateStr = toDateStr(getStartDate(row.leavePeriod));
         const isToday    = rowDateStr === todayStr;
         const isExpanded = !!row._expanded;
-
-        const rowBg = isToday
-          ? 'bg-amber-100'
-          : (isExpanded ? 'bg-blue-50/70 hover:bg-blue-100/50' : 'hover:bg-emerald-50/50');
+        const rowBg = isToday ? 'bg-amber-100'
+                    : isExpanded ? 'bg-blue-50/70 hover:bg-blue-100/50'
+                    : 'hover:bg-emerald-50/50';
 
         const todayBadge    = isToday    ? '<span style="font-size:10px" class="ml-1 px-1.5 py-0.5 bg-amber-500 text-white rounded font-bold">今日</span>' : '';
         const expandedBadge = isExpanded ? '<span style="font-size:9px" class="ml-1 px-1 py-0.5 bg-blue-300 text-blue-900 rounded">展開</span>' : '';
-
-        const statusColor = row.status === '申請中' ? 'text-orange-600 font-semibold' :
-                            row.status === '差戻'   ? 'text-red-600 font-semibold' :
-                            isToday ? 'text-gray-700' : 'text-gray-600';
+        const statusColor   = row.status === '申請中' ? 'text-orange-600 font-semibold'
+                            : row.status === '差戻'   ? 'text-red-600 font-semibold'
+                            : isToday ? 'text-gray-700' : 'text-gray-600';
         const textBase = isToday ? 'text-gray-800 font-semibold' : 'text-gray-600';
 
-        const tdA = showApplicant ? `<td class="p-3 font-medium ${isToday?'text-gray-900 font-bold':'text-gray-800'} whitespace-nowrap th-applicant">${escapeHTML(row.applicant)}</td>` : '';
-        const tdT = showLeaveType ? `<td class="p-3 whitespace-nowrap th-leaveType"><span class="px-2 py-1 ${isToday?'bg-amber-200 text-amber-900':'bg-green-100 text-green-800'} rounded-full text-xs print:bg-transparent print:border print:border-gray-400">${escapeHTML(row.leaveType)}</span></td>` : '';
-        const tdP = showPeriod    ? `<td class="p-3 ${textBase} whitespace-nowrap th-period">${escapeHTML(row.leavePeriod)}${todayBadge}${expandedBadge}</td>` : '';
-        const tdD = showDays      ? `<td class="p-3 ${textBase} whitespace-nowrap th-days">${escapeHTML(row.leaveDays)}</td>` : '';
-        const tdR = showRemark    ? `<td class="p-3 ${textBase} text-xs th-remark">${escapeHTML(row.remark||'')}</td>` : '';
-        const tdS = showStatus    ? `<td class="p-3 ${statusColor} whitespace-nowrap th-status">${escapeHTML(row.status)}</td>` : '';
+        const tdMap = {
+          applicant: `<td class="p-3 font-medium ${isToday?'text-gray-900 font-bold':'text-gray-800'} whitespace-nowrap">${escapeHTML(row.applicant)}</td>`,
+          leaveType: `<td class="p-3 whitespace-nowrap"><span class="px-2 py-1 ${isToday?'bg-amber-200 text-amber-900':'bg-green-100 text-green-800'} rounded-full text-xs print:bg-transparent print:border print:border-gray-400">${escapeHTML(row.leaveType)}</span></td>`,
+          period:    `<td class="p-3 ${textBase} whitespace-nowrap">${escapeHTML(row.leavePeriod)}${todayBadge}${expandedBadge}</td>`,
+          days:      `<td class="p-3 ${textBase} whitespace-nowrap">${escapeHTML(row.leaveDays)}</td>`,
+          remark:    `<td class="p-3 ${textBase} text-xs">${escapeHTML(row.remark||'')}</td>`,
+          status:    `<td class="p-3 ${statusColor} whitespace-nowrap">${escapeHTML(row.status)}</td>`,
+        };
 
-        return `<tr class="transition-colors ${rowBg} ${borderClass}">${tdA}${tdT}${tdP}${tdD}${tdR}${tdS}</tr>`;
+        const tds = visibleCols.map(id => tdMap[id] || '').join('');
+        return `<tr class="transition-colors ${rowBg} ${borderClass}">${tds}</tr>`;
       }).join('');
     }
 
     recordCount.innerText = `全 ${filteredData.length} 件`;
     let cond = [];
     if (filterName.value) cond.push(`対象: ${filterName.value}`);
+    const ct = getCheckedLeaveTypes();
+    if (ct !== null) cond.push(`種類: ${[...ct].join('・')}`);
     if (filterStartDate.value || filterEndDate.value)
       cond.push(`期間: ${filterStartDate.value||'指定なし'} 〜 ${filterEndDate.value||'指定なし'}`);
     printConditions.innerText = cond.join(' / ');
@@ -560,6 +718,78 @@
   }
 
   // =============================================
+  // 種類フィルタ
+  // =============================================
+  // null = すべて選択（フィルタなし）、Set = 選択中の種類
+  function getCheckedLeaveTypes() {
+    const list = document.getElementById('leaveTypeCheckList');
+    if (!list) return null;
+    const checkboxes = list.querySelectorAll('input[type=checkbox]');
+    if (checkboxes.length === 0) return null;
+    const allChecked = [...checkboxes].every(cb => cb.checked);
+    if (allChecked) return null;
+    const checked = new Set([...checkboxes].filter(cb => cb.checked).map(cb => cb.value));
+    return checked.size > 0 ? checked : null;
+  }
+
+  function updateLeaveTypeFilterLabel() {
+    const label = document.getElementById('leaveTypeFilterLabel');
+    const ct = getCheckedLeaveTypes();
+    if (ct === null) {
+      label.textContent = 'すべて';
+      label.className = 'truncate text-gray-500';
+    } else {
+      const arr = [...ct];
+      label.textContent = arr.length <= 2 ? arr.join('・') : `${arr[0]} 他${arr.length - 1}件`;
+      label.className = 'truncate text-emerald-700 font-medium';
+    }
+  }
+
+  function updateLeaveTypeDropdown() {
+    const list = document.getElementById('leaveTypeCheckList');
+    const unique = [...new Set(rawData.map(d => d.leaveType))].filter(Boolean).sort((a,b) => a.localeCompare(b,'ja'));
+    list.innerHTML = '';
+    unique.forEach(type => {
+      const label = document.createElement('label');
+      label.className = 'flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer';
+      label.innerHTML = `
+        <input type="checkbox" value="${escapeHTML(type)}" checked class="rounded text-emerald-600 leaveType-cb">
+        <span class="text-xs text-gray-700">${escapeHTML(type)}</span>
+      `;
+      label.querySelector('input').addEventListener('change', () => {
+        // 全選択チェックボックスの状態を同期
+        const all = list.querySelectorAll('.leaveType-cb');
+        document.getElementById('leaveTypeAll').checked = [...all].every(cb => cb.checked);
+        updateLeaveTypeFilterLabel();
+        quickRangeMode = false;
+        updateTable();
+      });
+      list.appendChild(label);
+    });
+    updateLeaveTypeFilterLabel();
+  }
+
+  // 種類ドロップダウン開閉
+  document.getElementById('leaveTypeFilterBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const dd = document.getElementById('leaveTypeDropdown');
+    dd.classList.toggle('hidden');
+  });
+  // 外側クリックで閉じる
+  document.addEventListener('click', () => {
+    document.getElementById('leaveTypeDropdown').classList.add('hidden');
+  });
+  document.getElementById('leaveTypeDropdown').addEventListener('click', e => e.stopPropagation());
+
+  // 全選択/解除
+  document.getElementById('leaveTypeAll').addEventListener('change', (e) => {
+    document.querySelectorAll('.leaveType-cb').forEach(cb => { cb.checked = e.target.checked; });
+    updateLeaveTypeFilterLabel();
+    quickRangeMode = false;
+    updateTable();
+  });
+
+  // =============================================
   // イベントリスナー
   // =============================================
 
@@ -571,6 +801,7 @@
       alert('有効なデータが見つかりませんでした。\n\n【確認事項】\n・C4thの一覧画面からコピーしていますか？\n・「承認済」または「申請中」の列が含まれていますか？');
     document.getElementById('inputText').value = '';
     updateEmployeeDropdown();
+    updateLeaveTypeDropdown();
     updateTable();
   });
 
@@ -595,14 +826,14 @@
     updateTable();
   });
 
-  document.querySelectorAll('th[data-sort]').forEach(th => {
-    th.addEventListener('click', () => {
-      const key = th.getAttribute('data-sort');
-      if (sortKey === key) { sortAsc = !sortAsc; } else { sortKey = key; sortAsc = true; }
-      updateTable();
-    });
+  // 並び替え実行
+  document.getElementById('applySortBtn').addEventListener('click', () => {
+    sortConfig = readSortUI();
+    quickRangeMode = false;
+    updateTable();
   });
 
+  // 設定パネル開閉
   document.getElementById('settingToggleBtn').addEventListener('click', () => {
     const panel   = document.getElementById('settingPanel');
     const chevron = document.getElementById('settingChevron');
@@ -610,6 +841,7 @@
     chevron.style.transform = hidden ? '' : 'rotate(180deg)';
   });
 
+  // 設定保存
   document.getElementById('settingSaveBtn').addEventListener('click', () => {
     const before = parseInt(document.getElementById('settingBefore').value, 10);
     const after  = parseInt(document.getElementById('settingAfter').value, 10);
@@ -617,20 +849,10 @@
     settings.before = before;
     settings.after  = after;
     updateQuickRangeBtnLabel();
-    updateColumnVisibility();
     persistSettings();
     const msg = document.getElementById('settingSavedMsg');
     msg.classList.remove('hidden');
     setTimeout(() => msg.classList.add('hidden'), 2000);
-    updateTable();
-  });
-
-  // 列チェックのリアルタイム反映
-  ['colApplicant','colLeaveType','colPeriod','colDays','colRemark','colStatus'].forEach(id => {
-    document.getElementById(id).addEventListener('change', () => {
-      updateColumnVisibility();
-      updateTable();
-    });
   });
 
   // 祝日CSV
@@ -645,14 +867,10 @@
       lines.forEach(line => {
         const m = line.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})/);
         if (m) {
-          const ds = `${m[1]}/${String(parseInt(m[2])).padStart(2,'0')}/${String(parseInt(m[3])).padStart(2,'0')}`;
-          newSet.add(ds);
+          newSet.add(`${m[1]}/${String(parseInt(m[2])).padStart(2,'0')}/${String(parseInt(m[3])).padStart(2,'0')}`);
         }
       });
-      if (newSet.size === 0) {
-        alert('祝日データが読み取れませんでした。\n内閣府のCSV形式（例：2026/1/1,元日）を確認してください。');
-        return;
-      }
+      if (newSet.size === 0) { alert('祝日データが読み取れませんでした。'); return; }
       holidaySet = newSet;
       try { localStorage.setItem('c4th_holidays', JSON.stringify([...holidaySet])); } catch(err) {}
       updateHolidayStatus();
@@ -665,14 +883,19 @@
   // Excel出力
   document.getElementById('exportBtn').addEventListener('click', () => {
     if (filteredData.length === 0) { alert('出力するデータがありません。'); return; }
+    const visibleCols = colOrder.filter(id => colVisible[id]);
+    const labelMap = Object.fromEntries(COL_DEFS.map(c => [c.id, c.label]));
+    const fieldMap = {
+      applicant: d => d.applicant,
+      leaveType: d => d.leaveType,
+      period:    d => d.leavePeriod,
+      days:      d => d.leaveDays,
+      remark:    d => d.remark || '',
+      status:    d => d.status,
+    };
     const exportData = filteredData.map(d => {
       const obj = {};
-      if (document.getElementById('colApplicant').checked) obj['申請者']   = d.applicant;
-      if (document.getElementById('colLeaveType').checked) obj['休暇種類'] = d.leaveType;
-      if (document.getElementById('colPeriod').checked)    obj['取得期間'] = d.leavePeriod;
-      if (document.getElementById('colDays').checked)      obj['日数/時間'] = d.leaveDays;
-      if (document.getElementById('colRemark').checked)    obj['取得事由'] = d.remark || '';
-      if (document.getElementById('colStatus').checked)    obj['状況']     = d.status;
+      visibleCols.forEach(id => { obj[labelMap[id]] = fieldMap[id](d); });
       return obj;
     });
     const ws = XLSX.utils.json_to_sheet(exportData);
@@ -685,8 +908,10 @@
   // 初期化
   // =============================================
   loadFromStorage();
+  renderColOrderList();
+  renderTableHeader();
+  syncSortUI();
   updateQuickRangeBtnLabel();
-  updateColumnVisibility();
   updateHolidayStatus();
   updateExpandToggleBtn();
 </script>
