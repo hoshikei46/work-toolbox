@@ -155,6 +155,23 @@ button { cursor: pointer; font-family: inherit; font-size: 13px; border-radius: 
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
 
+/* Extract tab */
+.drop-zone { border: 1.5px dashed var(--border2); border-radius: var(--radius); padding: 40px 20px; text-align: center; cursor: pointer; transition: all 0.15s; background: var(--surface2); }
+.drop-zone:hover, .drop-zone.drag-over { border-color: var(--accent); background: var(--accent-bg); }
+.drop-zone-icon { font-size: 32px; margin-bottom: 10px; }
+.drop-zone-text { font-size: 14px; color: var(--text2); }
+.drop-zone-sub { font-size: 12px; color: var(--text3); margin-top: 4px; }
+.extracted-task { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 0.5px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 8px; background: var(--surface); }
+.extracted-task input[type="checkbox"] { width: 16px; height: 16px; margin-top: 2px; flex-shrink: 0; accent-color: var(--accent); cursor: pointer; }
+.extracted-task-body { flex: 1; min-width: 0; }
+.extracted-task-title { font-size: 14px; color: var(--text); line-height: 1.4; }
+.extracted-task-meta { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; align-items: center; }
+.extracted-task-meta select, .extracted-task-meta input[type="date"] { font-size: 12px; padding: 3px 7px; border: 0.5px solid var(--border2); border-radius: var(--radius-sm); background: var(--surface2); color: var(--text); font-family: inherit; outline: none; }
+.extracted-task-meta select:focus, .extracted-task-meta input[type="date"]:focus { border-color: var(--accent); }
+.priority-select-high { color: var(--danger); }
+.priority-select-mid { color: var(--warn); }
+.file-info { font-size: 12px; color: var(--text3); padding: 6px 10px; background: var(--surface2); border-radius: var(--radius-sm); margin-bottom: 12px; }
+
 /* Responsive */
 @media (max-width: 640px) {
   .layout { grid-template-columns: 1fr; }
@@ -206,6 +223,9 @@ button { cursor: pointer; font-family: inherit; font-size: 13px; border-radius: 
       <div class="nav-item" onclick="switchTab('chat')">
         <span>💬</span> チャット
       </div>
+      <div class="nav-item" onclick="switchTab('extract')">
+        <span>📄</span> 文書からタスク抽出
+      </div>
       <div class="nav-item" onclick="showDailyReview()">
         <span>🔍</span> デイリーレビュー
       </div>
@@ -220,6 +240,7 @@ button { cursor: pointer; font-family: inherit; font-size: 13px; border-radius: 
     <div class="tabs">
       <div class="tab active" id="tab-tasks" onclick="switchTab('tasks')">タスク</div>
       <div class="tab" id="tab-chat" onclick="switchTab('chat')">Claudeと話す</div>
+      <div class="tab" id="tab-extract" onclick="switchTab('extract')">文書からタスク抽出</div>
       <div class="tab" id="tab-settings" onclick="switchTab('settings')">設定</div>
     </div>
 
@@ -275,9 +296,85 @@ button { cursor: pointer; font-family: inherit; font-size: 13px; border-radius: 
       </div>
     </div>
 
+    <!-- Extract tab -->
+    <div class="tab-content" id="content-extract" style="display:none;">
+      <div style="display:flex;height:calc(100vh - 52px - 44px);overflow:hidden;">
+
+        <!-- 左ペイン：文書入力 -->
+        <div style="width:340px;flex-shrink:0;border-right:0.5px solid var(--border);overflow-y:auto;padding:20px;background:var(--surface);">
+          <div style="font-size:14px;font-weight:500;margin-bottom:12px;color:var(--text);">文書を読み込む</div>
+          <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
+            <div class="drop-zone-icon">📄</div>
+            <div class="drop-zone-text">ドロップまたはクリックして選択</div>
+            <div class="drop-zone-sub">PDF / Word / PNG・JPG</div>
+          </div>
+          <input type="file" id="file-input" style="display:none" accept=".pdf,.docx,.png,.jpg,.jpeg" onchange="handleFileSelect(event)" />
+          <div id="extract-file-name" style="font-size:12px;color:var(--accent);margin-top:8px;min-height:18px;"></div>
+
+          <div style="display:flex;align-items:center;gap:8px;margin:12px 0;">
+            <div style="flex:1;height:0.5px;background:var(--border);"></div>
+            <span style="font-size:11px;color:var(--text3);">または</span>
+            <div style="flex:1;height:0.5px;background:var(--border);"></div>
+          </div>
+
+          <textarea id="paste-text" placeholder="文書のテキストをここに貼り付け..." style="width:100%;height:160px;border:0.5px solid var(--border2);border-radius:var(--radius-sm);padding:10px 12px;font-size:13px;font-family:inherit;resize:vertical;outline:none;background:var(--surface2);color:var(--text);line-height:1.6;"></textarea>
+
+          <div style="margin-top:10px;display:flex;gap:8px;">
+            <button class="btn-primary" id="extract-btn" onclick="extractTasksFromDoc()" style="flex:1;">Claudeで分析 →</button>
+            <button class="btn" onclick="clearExtract()">クリア</button>
+          </div>
+
+          <!-- 登録ボタン（タスク確定後に表示） -->
+          <div id="register-area" style="display:none;margin-top:16px;padding-top:16px;border-top:0.5px solid var(--border);">
+            <div style="font-size:13px;font-weight:500;margin-bottom:8px;color:var(--text);">確定したタスク</div>
+            <div id="confirmed-task-list" style="margin-bottom:12px;"></div>
+            <button class="btn-primary" style="width:100%;" onclick="registerExtractedTasks()">TickTickに登録する</button>
+            <div id="register-status" style="font-size:12px;color:var(--text3);margin-top:8px;text-align:center;"></div>
+          </div>
+        </div>
+
+        <!-- 右ペイン：Claude対話 -->
+        <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
+          <div style="padding:12px 20px;border-bottom:0.5px solid var(--border);background:var(--surface2);display:flex;align-items:center;gap:8px;">
+            <span style="font-size:13px;font-weight:500;color:var(--text);">Claudeと整理する</span>
+            <span style="font-size:12px;color:var(--text3);">文書を分析後、対話でタスクを絞り込みます</span>
+          </div>
+          <div id="extract-chat" style="flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:12px;">
+            <div class="msg assistant">
+              <div class="msg-bubble" style="background:var(--surface);border:0.5px solid var(--border);">
+                文書をアップロードするか、テキストを貼り付けて「Claudeで分析」を押してください。<br>
+                内容を読んで、タスクの候補を整理・提案します。その後、対話で調整できます。
+              </div>
+            </div>
+          </div>
+          <div style="padding:14px 20px;border-top:0.5px solid var(--border);background:var(--surface);display:flex;gap:8px;">
+            <textarea id="extract-chat-input" placeholder="Claudeに追加の指示や質問を..." style="flex:1;border:0.5px solid var(--border2);border-radius:var(--radius-sm);padding:9px 12px;font-size:14px;font-family:inherit;resize:none;outline:none;background:var(--surface2);color:var(--text);line-height:1.5;height:42px;" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendExtractChat();}"></textarea>
+            <button class="btn-primary" id="extract-send-btn" onclick="sendExtractChat()">送信</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Settings tab -->
     <div class="tab-content" id="content-settings" style="display:none;">
       <div class="content">
+
+        <!-- config.json 設定管理 -->
+        <div class="card">
+          <div class="card-title">設定ファイル（config.json）</div>
+          <p style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:14px;">設定をconfig.jsonとして保存し、次回起動時に読み込めます。アップデート時も同じファイルを使い回せます。</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+            <button class="btn-primary" onclick="document.getElementById('config-file-input').click()">📂 config.jsonを読み込む</button>
+            <button class="btn" onclick="saveConfigJson()">💾 config.jsonを保存する</button>
+          </div>
+          <input type="file" id="config-file-input" accept=".json" style="display:none;" onchange="loadConfigJson(event)" />
+          <div id="config-status" style="font-size:13px;color:var(--text3);"></div>
+          <div style="margin-top:10px;padding:10px 12px;background:var(--surface2);border-radius:var(--radius-sm);font-size:12px;color:var(--text3);line-height:1.7;">
+            💡 <strong style="font-weight:500;color:var(--text2);">使い方：</strong> 初回は設定を入力して「保存」→「config.jsonを保存する」でファイルをダウンロード。次回以降はHTMLを開いたら「config.jsonを読み込む」で即座に復元できます。
+          </div>
+        </div>
+
+        <!-- 接続設定 -->
         <div class="card">
           <div class="card-title">接続設定</div>
           <div class="token-notice">アクセストークンは約180日間有効です。期限切れの際は再認証が必要です。</div>
@@ -302,6 +399,7 @@ button { cursor: pointer; font-family: inherit; font-size: 13px; border-radius: 
           <div id="settings-status" style="margin-top:10px; font-size:13px; color:var(--text3);"></div>
         </div>
 
+        <!-- Claudeの振る舞い -->
         <div class="card">
           <div class="card-title">Claudeの振る舞い設定</div>
           <div class="settings-row">
@@ -322,13 +420,31 @@ button { cursor: pointer; font-family: inherit; font-size: 13px; border-radius: 
             <button class="btn-primary" onclick="savePersona()">保存</button>
           </div>
         </div>
+
+        <!-- プロジェクト管理（TickTick連携） -->
+        <div class="card">
+          <div class="card-title">プロジェクト管理（TickTick連携）</div>
+          <p style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:14px;">プロジェクト名・色の変更や新規作成がここからできます。変更はTickTickに即時反映されます。</p>
+
+          <!-- 新規作成 -->
+          <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center;">
+            <input type="text" id="new-proj-name" placeholder="新しいプロジェクト名" style="flex:1;border:0.5px solid var(--border2);border-radius:var(--radius-sm);padding:7px 10px;font-size:13px;font-family:inherit;outline:none;background:var(--surface2);color:var(--text);" />
+            <input type="color" id="new-proj-color" value="#4772FA" style="width:36px;height:34px;border:0.5px solid var(--border2);border-radius:var(--radius-sm);cursor:pointer;padding:2px;" title="色を選択" />
+            <button class="btn-primary" onclick="createProject()">作成</button>
+          </div>
+
+          <!-- プロジェクト一覧 -->
+          <div id="project-manage-list" style="max-height:380px;overflow-y:auto;"></div>
+          <div id="proj-manage-status" style="margin-top:10px;font-size:13px;color:var(--text3);"></div>
+        </div>
+
       </div>
     </div>
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
 <script>
-// ========== STATE ==========
 const STATE = {
   token: localStorage.getItem('tt_token') || '773635f0-1ea6-4cec-bbd9-d01f55e4faf2',
   apiKey: localStorage.getItem('claude_apikey') || '',
@@ -437,14 +553,77 @@ async function loadTasks() {
 }
 
 // ========== RENDER ==========
+function getHiddenProjects() {
+  try { return JSON.parse(localStorage.getItem('hidden_projects') || '[]'); } catch(e) { return []; }
+}
+
 function renderProjects(projects) {
+  const hidden = getHiddenProjects();
+  const favorites = getFavoriteProjects();
   const el = document.getElementById('project-list');
-  el.innerHTML = projects.map(p => `
-    <div class="nav-item" onclick="switchView('project-${p.id}', this)" data-pid="${p.id}">
+  const visible = projects.filter(p => !hidden.includes(p.id));
+  // お気に入りを先頭に
+  const favProjects = visible.filter(p => favorites.includes(p.id));
+  const restProjects = visible.filter(p => !favorites.includes(p.id));
+  const sorted = [...favProjects, ...restProjects];
+
+  el.innerHTML = sorted.map(p => {
+    const isFav = favorites.includes(p.id);
+    return `
+    <div class="nav-item" onclick="switchView('project-${p.id}', this)" data-pid="${p.id}" style="padding-right:4px;">
       <span style="width:8px;height:8px;border-radius:50%;background:${p.color||'#888'};flex-shrink:0;"></span>
-      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${p.name}</span>
+      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${escHtml(p.name)}</span>
+      <span onclick="event.stopPropagation();toggleFavorite('${p.id}')" title="${isFav?'お気に入り解除':'お気に入り'}" style="font-size:12px;color:${isFav?'#f59e0b':'var(--border2)'};cursor:pointer;padding:2px 4px;flex-shrink:0;">★</span>
+    </div>`;
+  }).join('');
+
+  renderProjectVisibilityList(projects);
+}
+
+function getFavoriteProjects() {
+  try { return JSON.parse(localStorage.getItem('fav_projects') || '[]'); } catch(e) { return []; }
+}
+
+function toggleFavorite(projectId) {
+  let favs = getFavoriteProjects();
+  if (favs.includes(projectId)) {
+    favs = favs.filter(id => id !== projectId);
+  } else {
+    favs.unshift(projectId);
+  }
+  localStorage.setItem('fav_projects', JSON.stringify(favs));
+  renderProjects(STATE.projects);
+}
+
+function renderProjectVisibilityList(projects) {
+  const el = document.getElementById('project-visibility-list');
+  if (!el) return;
+  const hidden = getHiddenProjects();
+  el.innerHTML = projects.map(p => `
+    <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:0.5px solid var(--border);">
+      <input type="checkbox" id="pvis-${p.id}" ${hidden.includes(p.id)?'':'checked'} style="accent-color:var(--accent);width:15px;height:15px;" />
+      <span style="width:10px;height:10px;border-radius:50%;background:${p.color||'#888'};flex-shrink:0;"></span>
+      <label for="pvis-${p.id}" style="font-size:13px;color:var(--text);cursor:pointer;flex:1;">${escHtml(p.name)}</label>
     </div>
   `).join('');
+}
+
+function saveProjectVisibility() {
+  const hidden = STATE.projects.filter(p => {
+    const cb = document.getElementById(`pvis-${p.id}`);
+    return cb && !cb.checked;
+  }).map(p => p.id);
+  localStorage.setItem('hidden_projects', JSON.stringify(hidden));
+  renderProjects(STATE.projects);
+  document.getElementById('proj-visibility-status').textContent = `保存しました（${hidden.length}件を非表示）`;
+  setTimeout(() => { document.getElementById('proj-visibility-status').textContent = ''; }, 2000);
+}
+
+function selectAllProjects(val) {
+  STATE.projects.forEach(p => {
+    const cb = document.getElementById(`pvis-${p.id}`);
+    if (cb) cb.checked = val;
+  });
 }
 
 function updateStats() {
@@ -544,12 +723,19 @@ function switchView(view, el) {
 }
 
 function switchTab(tab) {
-  ['tasks','chat','settings'].forEach(t => {
-    document.getElementById('content-'+t).style.display = t===tab ? (t==='chat'?'flex':'block') : 'none';
+  ['tasks','chat','extract','settings'].forEach(t => {
+    const el = document.getElementById('content-'+t);
+    if (el) el.style.display = 'none';
     document.getElementById('tab-'+t)?.classList.toggle('active', t===tab);
   });
   if (tab === 'chat') {
     document.getElementById('content-chat').style.display = 'flex';
+  } else if (tab === 'tasks') {
+    document.getElementById('content-tasks').style.display = 'block';
+  } else if (tab === 'extract') {
+    document.getElementById('content-extract').style.display = 'block';
+  } else if (tab === 'settings') {
+    document.getElementById('content-settings').style.display = 'block';
   }
 }
 
@@ -710,13 +896,353 @@ async function showDailyReview() {
   await sendChat();
 }
 
+// ========== DOCUMENT EXTRACTION ==========
+let extractedFileData = null;
+let extractedFileType = null;
+let extractedFileName = null;
+let extractChatHistory = [];
+let confirmedTasks = [];
+
+function handleDragOver(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.add('drag-over');
+}
+function handleDragLeave(e) {
+  document.getElementById('drop-zone').classList.remove('drag-over');
+}
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) processFile(file);
+}
+function handleFileSelect(e) {
+  const file = e.target.files[0];
+  if (file) processFile(file);
+}
+
+async function processFile(file) {
+  extractedFileName = file.name;
+  document.getElementById('extract-file-name').textContent = `📎 ${file.name}`;
+  document.getElementById('paste-text').value = '';
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (['pdf','png','jpg','jpeg'].includes(ext)) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      extractedFileData = e.target.result.split(',')[1];
+      extractedFileType = ext === 'pdf' ? 'application/pdf' : `image/${ext === 'jpg' ? 'jpeg' : ext}`;
+    };
+    reader.readAsDataURL(file);
+  } else if (ext === 'docx') {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const result = await window.mammoth.extractRawText({ arrayBuffer: e.target.result });
+        document.getElementById('paste-text').value = result.value;
+        extractedFileData = null;
+        extractedFileType = null;
+      } catch(err) {
+        document.getElementById('paste-text').value = '（Wordの読み込みに失敗しました。テキストを手動で貼り付けてください）';
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+}
+
+function clearExtract() {
+  extractedFileData = null; extractedFileType = null; extractedFileName = null;
+  extractChatHistory = []; confirmedTasks = [];
+  document.getElementById('paste-text').value = '';
+  document.getElementById('extract-file-name').textContent = '';
+  document.getElementById('file-input').value = '';
+  document.getElementById('register-area').style.display = 'none';
+  document.getElementById('extract-chat').innerHTML = `
+    <div class="msg assistant">
+      <div class="msg-bubble" style="background:var(--surface);border:0.5px solid var(--border);">
+        文書をアップロードするか、テキストを貼り付けて「Claudeで分析」を押してください。<br>
+        内容を読んで、タスクの候補を整理・提案します。その後、対話で調整できます。
+      </div>
+    </div>`;
+}
+
+function appendExtractMsg(role, html) {
+  const el = document.getElementById('extract-chat');
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-bubble';
+  if (role === 'assistant') { bubble.style.background = 'var(--surface)'; bubble.style.border = '0.5px solid var(--border)'; }
+  bubble.innerHTML = html;
+  div.appendChild(bubble);
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+}
+
+function appendExtractTyping() {
+  const el = document.getElementById('extract-chat');
+  const div = document.createElement('div');
+  div.className = 'msg assistant'; div.id = 'extract-typing';
+  div.innerHTML = `<div class="msg-bubble" style="background:var(--surface);border:0.5px solid var(--border);"><div class="typing"><span></span><span></span><span></span></div></div>`;
+  el.appendChild(div); el.scrollTop = el.scrollHeight;
+}
+function removeExtractTyping() { document.getElementById('extract-typing')?.remove(); }
+
+async function extractTasksFromDoc() {
+  if (!STATE.apiKey) { alert('Claude APIキーが設定されていません。'); return; }
+  const pasteText = document.getElementById('paste-text').value.trim();
+  if (!extractedFileData && !pasteText) { alert('ファイルをアップロードするか、テキストを貼り付けてください。'); return; }
+
+  const btn = document.getElementById('extract-btn');
+  btn.disabled = true; btn.textContent = '分析中...';
+  extractChatHistory = [];
+  confirmedTasks = [];
+  document.getElementById('register-area').style.display = 'none';
+
+  const projectNames = STATE.projects.map(p => p.name).join('、');
+  const now = new Date();
+  const todayStr = now.toLocaleDateString('ja-JP',{year:'numeric',month:'long',day:'numeric',weekday:'long'});
+
+  const systemPrompt = `あなたは${STATE.name}さん（${STATE.role}）の専任タスクマネージャーです。
+今日の日付: ${todayStr}
+利用可能なプロジェクト: ${projectNames}
+
+【あなたの役割】
+文書を読んでタスクを抽出し、以下を行ってください：
+1. タスク候補を箇条書きで提示（番号付き）
+2. 各タスクに「緊急度コメント」「推奨プロジェクト」「推奨期限の根拠」を添える
+3. まとめられるタスクがあれば提案する
+4. 「このタスクをTickTickに登録します。よろしければ『登録して』と言ってください」と締める
+
+ユーザーが「登録して」「これで登録」「OK」などと言ったら、確定したタスクを以下のJSON形式で出力する：
+%%TASKS_JSON%%
+[{"title":"...","dueDate":"YYYY-MM-DD or null","priority":"high/mid/low","project":"プロジェクト名"}]
+%%END%%
+
+【応答スタイル】
+- 親しみやすく、でも的確に
+- 長すぎず、箇条書きで見やすく
+- 期限が文書に明記されていない場合は文脈から推測して「〇月頃と推測」と明示する`;
+
+  appendExtractTyping();
+
+  try {
+    let userContent;
+    if (extractedFileData) {
+      const isImage = extractedFileType.startsWith('image/');
+      userContent = [
+        isImage
+          ? { type: 'image', source: { type: 'base64', media_type: extractedFileType, data: extractedFileData } }
+          : { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: extractedFileData } },
+        { type: 'text', text: 'この文書を読んで、対応が必要なタスクを整理・提案してください。' }
+      ];
+    } else {
+      userContent = `以下の文書を読んで、対応が必要なタスクを整理・提案してください。\n\n${pasteText}`;
+    }
+    extractChatHistory.push({ role: 'user', content: userContent });
+
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': STATE.apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 2048, system: systemPrompt, messages: extractChatHistory })
+    });
+    const data = await resp.json();
+    removeExtractTyping();
+    const text = data.content?.[0]?.text || 'エラーが発生しました。';
+    extractChatHistory.push({ role: 'assistant', content: text });
+    renderExtractResponse(text);
+  } catch(e) {
+    removeExtractTyping();
+    appendExtractMsg('assistant', 'エラーが発生しました: ' + escHtml(e.message));
+  }
+  btn.disabled = false; btn.textContent = 'Claudeで分析 →';
+}
+
+async function sendExtractChat() {
+  const input = document.getElementById('extract-chat-input');
+  const msg = input.value.trim();
+  if (!msg) return;
+  if (!STATE.apiKey) { alert('Claude APIキーが設定されていません。'); return; }
+  input.value = '';
+
+  appendExtractMsg('user', escHtml(msg));
+  extractChatHistory.push({ role: 'user', content: msg });
+
+  const projectNames = STATE.projects.map(p => p.name).join('、');
+  const now = new Date();
+  const todayStr = now.toLocaleDateString('ja-JP',{year:'numeric',month:'long',day:'numeric',weekday:'long'});
+
+  const systemPrompt = `あなたは${STATE.name}さん（${STATE.role}）の専任タスクマネージャーです。
+今日の日付: ${todayStr}
+利用可能なプロジェクト: ${projectNames}
+
+文書から抽出したタスクについて対話中です。ユーザーの指示に従ってタスクを調整・整理してください。
+
+ユーザーが「登録して」「これで登録」「OK」「確定」などと言ったら、最終的なタスク一覧を以下のJSON形式で出力してください：
+%%TASKS_JSON%%
+[{"title":"...","dueDate":"YYYY-MM-DD or null","priority":"high/mid/low","project":"プロジェクト名"}]
+%%END%%
+
+応答は親しみやすく、簡潔に。`;
+
+  document.getElementById('extract-send-btn').disabled = true;
+  appendExtractTyping();
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': STATE.apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 2048, system: systemPrompt, messages: extractChatHistory })
+    });
+    const data = await resp.json();
+    removeExtractTyping();
+    const text = data.content?.[0]?.text || 'エラーが発生しました。';
+    extractChatHistory.push({ role: 'assistant', content: text });
+    renderExtractResponse(text);
+  } catch(e) {
+    removeExtractTyping();
+    appendExtractMsg('assistant', 'エラー: ' + escHtml(e.message));
+  }
+  document.getElementById('extract-send-btn').disabled = false;
+}
+
+function renderExtractResponse(text) {
+  // JSONブロックを検出
+  const jsonMatch = text.match(/%%TASKS_JSON%%\s*([\s\S]*?)\s*%%END%%/);
+  if (jsonMatch) {
+    try {
+      const tasks = JSON.parse(jsonMatch[1].trim());
+      confirmedTasks = tasks;
+      const displayText = text.replace(/%%TASKS_JSON%%[\s\S]*?%%END%%/, '').trim();
+      if (displayText) appendExtractMsg('assistant', formatAssistantText(displayText));
+      renderConfirmedTasks(tasks);
+    } catch(e) {
+      appendExtractMsg('assistant', formatAssistantText(text));
+    }
+  } else {
+    appendExtractMsg('assistant', formatAssistantText(text));
+  }
+}
+
+function formatAssistantText(text) {
+  return escHtml(text)
+    .replace(/\n/g, '<br>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+}
+
+function renderConfirmedTasks(tasks) {
+  const el = document.getElementById('confirmed-task-list');
+  const projectOptions = STATE.projects.map(p => `<option value="${escHtml(p.id)}">${escHtml(p.name)}</option>`).join('');
+  const today = new Date().toISOString().slice(0,10);
+
+  el.innerHTML = tasks.map((t, i) => {
+    const matchedProj = STATE.projects.find(p => p.name === t.project || p.name.includes(t.project));
+    const projId = matchedProj ? matchedProj.id : (STATE.projects[0]?.id || '');
+    const prioVal = t.priority === 'high' ? '5' : t.priority === 'mid' ? '3' : '0';
+    const prioColor = t.priority === 'high' ? 'var(--danger)' : t.priority === 'mid' ? 'var(--warn)' : 'var(--text3)';
+    return `
+    <div style="padding:8px 0;border-bottom:0.5px solid var(--border);display:flex;gap:8px;align-items:flex-start;">
+      <input type="checkbox" id="ctask-${i}" checked style="margin-top:3px;accent-color:var(--accent);" />
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;color:var(--text);line-height:1.4;">${escHtml(t.title)}</div>
+        <div style="display:flex;gap:5px;margin-top:5px;flex-wrap:wrap;">
+          <select id="cproj-${i}" style="font-size:11px;padding:2px 5px;border:0.5px solid var(--border2);border-radius:4px;background:var(--surface2);color:var(--text);max-width:130px;">${projectOptions.replace(`value="${projId}"`,`value="${projId}" selected`)}</select>
+          <input type="date" id="cdue-${i}" value="${t.dueDate||''}" min="${today}" style="font-size:11px;padding:2px 5px;border:0.5px solid var(--border2);border-radius:4px;background:var(--surface2);color:var(--text);" />
+          <select id="cprio-${i}" style="font-size:11px;padding:2px 5px;border:0.5px solid var(--border2);border-radius:4px;background:var(--surface2);color:${prioColor};">
+            <option value="0" ${prioVal==='0'?'selected':''}>低</option>
+            <option value="3" ${prioVal==='3'?'selected':''}>中</option>
+            <option value="5" ${prioVal==='5'?'selected':''}>高</option>
+          </select>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('register-area').style.display = 'block';
+  document.getElementById('register-area').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function registerExtractedTasks() {
+  const tasks = confirmedTasks;
+  if (!tasks.length) return;
+  const statusEl = document.getElementById('register-status');
+  statusEl.textContent = '登録中...';
+  statusEl.style.color = 'var(--text3)';
+  let count = 0, errors = 0;
+  for (let i = 0; i < tasks.length; i++) {
+    const cb = document.getElementById(`ctask-${i}`);
+    if (!cb?.checked) continue;
+    const projId = document.getElementById(`cproj-${i}`)?.value;
+    const dueVal = document.getElementById(`cdue-${i}`)?.value;
+    const prioVal = parseInt(document.getElementById(`cprio-${i}`)?.value || '0');
+    try {
+      const body = { title: tasks[i].title, projectId: projId, priority: prioVal };
+      if (dueVal) body.dueDate = dueVal + 'T09:00:00+0900';
+      await ttPost('/task', body);
+      count++;
+    } catch(e) { errors++; }
+  }
+  await loadTasks();
+  statusEl.textContent = `${count}件登録完了${errors > 0 ? `（${errors}件失敗）` : ' ✓'}`;
+  statusEl.style.color = errors > 0 ? 'var(--danger)' : 'var(--success)';
+  if (count > 0) {
+    appendExtractMsg('assistant', `${count}件のタスクをTickTickに登録しました。タスクタブから確認できます。`);
+  }
+}
+
 // ========== SETTINGS ==========
+const SETTINGS_KEYS = ['tt_token','claude_apikey','user_name','user_role','hidden_projects','fav_projects'];
+
+function exportSettings() {
+  const data = {};
+  SETTINGS_KEYS.forEach(k => { const v = localStorage.getItem(k); if (v) data[k] = v; });
+  const json = JSON.stringify(data, null, 2);
+  navigator.clipboard.writeText(json).then(() => {
+    document.getElementById('transfer-status').textContent = 'クリップボードにコピーしました。新しいHTMLを開いて「インポート」に貼り付けてください。';
+    document.getElementById('transfer-status').style.color = 'var(--success)';
+  }).catch(() => {
+    // fallback: テキストエリアに表示
+    document.getElementById('import-area').style.display = 'block';
+    document.getElementById('import-text').value = json;
+    document.getElementById('transfer-status').textContent = '上のテキストをコピーして新しいHTMLで使用してください。';
+    document.getElementById('transfer-status').style.color = 'var(--warn)';
+  });
+}
+
+function showImportArea() {
+  const area = document.getElementById('import-area');
+  area.style.display = area.style.display === 'none' ? 'block' : 'none';
+}
+
+function importSettings() {
+  try {
+    const text = document.getElementById('import-text').value.trim();
+    const data = JSON.parse(text);
+    let count = 0;
+    SETTINGS_KEYS.forEach(k => {
+      if (data[k] !== undefined) { localStorage.setItem(k, data[k]); count++; }
+    });
+    // STATEに反映
+    STATE.token = localStorage.getItem('tt_token') || STATE.token;
+    STATE.apiKey = localStorage.getItem('claude_apikey') || STATE.apiKey;
+    STATE.name = localStorage.getItem('user_name') || STATE.name;
+    STATE.role = localStorage.getItem('user_role') || STATE.role;
+    loadSettingsUI();
+    document.getElementById('transfer-status').textContent = `${count}項目の設定を復元しました。`;
+    document.getElementById('transfer-status').style.color = 'var(--success)';
+    document.getElementById('import-area').style.display = 'none';
+    setTimeout(loadAll, 500);
+  } catch(e) {
+    document.getElementById('transfer-status').textContent = '読み込みに失敗しました。正しいエクスポートデータを貼り付けてください。';
+    document.getElementById('transfer-status').style.color = 'var(--danger)';
+  }
+}
+
 function saveSettings() {
   STATE.token = document.getElementById('settings-token').value.trim();
   STATE.apiKey = document.getElementById('settings-apikey').value.trim();
   localStorage.setItem('tt_token', STATE.token);
   localStorage.setItem('claude_apikey', STATE.apiKey);
   document.getElementById('settings-status').textContent = '保存しました。';
+  document.getElementById('settings-status').style.color = 'var(--success)';
   setTimeout(loadAll, 500);
 }
 
@@ -726,15 +1252,19 @@ function savePersona() {
   localStorage.setItem('user_name', STATE.name);
   localStorage.setItem('user_role', STATE.role);
   document.getElementById('settings-status').textContent = 'ペルソナ情報を保存しました。';
+  document.getElementById('settings-status').style.color = 'var(--success)';
 }
 
 async function testTickTick() {
   document.getElementById('settings-status').textContent = 'テスト中...';
+  document.getElementById('settings-status').style.color = 'var(--text3)';
   try {
     await loadProjects();
     document.getElementById('settings-status').textContent = `接続成功！プロジェクト ${STATE.projects.length} 件取得。`;
+    document.getElementById('settings-status').style.color = 'var(--success)';
   } catch(e) {
     document.getElementById('settings-status').textContent = 'エラー: ' + e.message;
+    document.getElementById('settings-status').style.color = 'var(--danger)';
   }
 }
 </script>
