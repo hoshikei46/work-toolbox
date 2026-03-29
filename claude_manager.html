@@ -620,7 +620,9 @@ async function ttPost(path, body) {
     body: JSON.stringify(body)
   });
   if (!r.ok) throw new Error(`API Error ${r.status}`);
-  return r.json();
+  const text = await r.text();
+  if (!text) return {};
+  try { return JSON.parse(text); } catch(e) { return {}; }
 }
 
 async function ttPatch(path, body) {
@@ -651,13 +653,13 @@ async function loadProjects() {
 async function loadTasks() {
   const el = document.getElementById('task-list');
   if (el) el.innerHTML = '<div class="loading"><div class="spinner"></div>タスク取得中...</div>';
+  STATE.tasks = []; // キャッシュを完全クリア
 
   const all = [];
   for (const p of STATE.projects) {
     try {
       const pd = await ttGet(`/project/${p.id}/data`);
       if (pd.tasks) all.push(...pd.tasks);
-      // TickTick APIのレート制限対策：100ms待機
       await new Promise(r => setTimeout(r, 100));
     } catch(e) {}
   }
@@ -1210,12 +1212,7 @@ async function addTask() {
 
 async function completeTask(taskId, projectId) {
   try {
-    const r = await fetch(`${API}/project/${projectId}/task/${taskId}/complete`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${STATE.token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({})
-    });
-    if (!r.ok) throw new Error(`API Error ${r.status}`);
+    await ttPost(`/project/${projectId}/task/${taskId}/complete`, {});
     STATE.tasks = STATE.tasks.map(t => t.id === taskId ? {...t, status: 2} : t);
     updateStats();
     renderTaskView();
