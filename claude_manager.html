@@ -250,34 +250,26 @@ button { cursor: pointer; font-family: inherit; font-size: 13px; border-radius: 
 
     <!-- Tasks tab -->
     <div class="tab-content active" id="content-tasks">
-      <div class="content">
-        <div class="stats-grid">
-          <div class="stat-card">
-            <div class="stat-num" id="s-today">-</div>
-            <div class="stat-label">今日</div>
+      <div style="display:flex;height:100%;overflow:hidden;">
+        <!-- タスクリスト -->
+        <div style="flex:1;overflow-y:auto;padding:20px;min-width:0;">
+          <div class="stats-grid">
+            <div class="stat-card"><div class="stat-num" id="s-today">-</div><div class="stat-label">今日</div></div>
+            <div class="stat-card"><div class="stat-num" id="s-week">-</div><div class="stat-label">今週</div></div>
+            <div class="stat-card"><div class="stat-num" id="s-overdue" style="color:#dc2626;">-</div><div class="stat-label">期限切れ</div></div>
+            <div class="stat-card"><div class="stat-num" id="s-all">-</div><div class="stat-label">合計</div></div>
           </div>
-          <div class="stat-card">
-            <div class="stat-num" id="s-week">-</div>
-            <div class="stat-label">今週</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-num" id="s-overdue" style="color:#dc2626;">-</div>
-            <div class="stat-label">期限切れ</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-num" id="s-all">-</div>
-            <div class="stat-label">合計</div>
+          <div class="card">
+            <div class="quick-add">
+              <input type="text" id="quick-input" placeholder="タスクを追加（Enterで登録）" onkeydown="if(event.key==='Enter')addTask()" />
+              <button class="btn-primary" onclick="addTask()">追加</button>
+            </div>
+            <div id="task-view-title" class="card-title">今日のタスク</div>
+            <div id="task-list"><div class="loading"><div class="spinner"></div>読み込み中...</div></div>
           </div>
         </div>
-
-        <div class="card">
-          <div class="quick-add">
-            <input type="text" id="quick-input" placeholder="タスクを追加（Enterで登録）" onkeydown="if(event.key==='Enter')addTask()" />
-            <button class="btn-primary" onclick="addTask()">追加</button>
-          </div>
-          <div id="task-view-title" class="card-title">今日のタスク</div>
-          <div id="task-list"><div class="loading"><div class="spinner"></div>読み込み中...</div></div>
-        </div>
+        <!-- 詳細パネル -->
+        <div id="task-detail-panel" style="width:0;flex-shrink:0;border-left:0.5px solid var(--border);overflow-y:auto;background:var(--surface);transition:width 0.2s;"></div>
       </div>
     </div>
 
@@ -937,42 +929,61 @@ function initDragDrop(type) {
   // HTML5 drag events already set via inline handlers
 }
 
-function updateStats() {
+// JST基準の今日の日付文字列（YYYY-MM-DD）を返す
+function todayJST() {
   const now = new Date();
-  const todayStr = now.toISOString().slice(0,10);
+  // UTC+9に変換
+  const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  return jst.toISOString().slice(0, 10);
+}
+
+// タスクのdueDateをJST基準の日付文字列に変換（YYYY-MM-DD）
+function dueDateStr(dueDate) {
+  if (!dueDate) return null;
+  const d = new Date(dueDate);
+  const jst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+  return jst.toISOString().slice(0, 10);
+}
+
+function updateStats() {
+  const today = todayJST();
+  const now = new Date();
   const weekEnd = new Date(now); weekEnd.setDate(weekEnd.getDate() + 7);
   const active = STATE.tasks.filter(t => t.status === 0);
-  const today = active.filter(t => t.dueDate && t.dueDate.slice(0,10) === todayStr);
-  const week = active.filter(t => t.dueDate && new Date(t.dueDate) <= weekEnd);
-  const overdue = active.filter(t => t.dueDate && new Date(t.dueDate) < now && t.dueDate.slice(0,10) !== todayStr);
-  document.getElementById('s-today').textContent = today.length;
-  document.getElementById('s-week').textContent = week.length;
-  document.getElementById('s-overdue').textContent = overdue.length;
+  const todayTasks = active.filter(t => dueDateStr(t.dueDate) === today);
+  const weekTasks = active.filter(t => t.dueDate && new Date(t.dueDate) <= weekEnd);
+  const overdueTasks = active.filter(t => {
+    const ds = dueDateStr(t.dueDate);
+    return ds && ds < today;
+  });
+  document.getElementById('s-today').textContent = todayTasks.length;
+  document.getElementById('s-week').textContent = weekTasks.length;
+  document.getElementById('s-overdue').textContent = overdueTasks.length;
   document.getElementById('s-all').textContent = active.length;
-  document.getElementById('cnt-today').textContent = today.length;
-  document.getElementById('cnt-week').textContent = week.length;
+  document.getElementById('cnt-today').textContent = todayTasks.length;
+  document.getElementById('cnt-week').textContent = weekTasks.length;
   document.getElementById('cnt-all').textContent = active.length;
-  document.getElementById('cnt-overdue').textContent = overdue.length;
+  document.getElementById('cnt-overdue').textContent = overdueTasks.length;
   collectAndRenderTags(active);
 }
 
 function renderTaskView() {
   const el = document.getElementById('task-list');
   const titleEl = document.getElementById('task-view-title');
+  const today = todayJST();
   const now = new Date();
-  const todayStr = now.toISOString().slice(0,10);
   const weekEnd = new Date(now); weekEnd.setDate(weekEnd.getDate() + 7);
   let tasks = STATE.tasks.filter(t => t.status === 0);
   let title = '今日のタスク';
 
   if (STATE.currentView === 'today') {
-    tasks = tasks.filter(t => t.dueDate && t.dueDate.slice(0,10) === todayStr);
+    tasks = tasks.filter(t => dueDateStr(t.dueDate) === today);
     title = '今日のタスク';
   } else if (STATE.currentView === 'week') {
     tasks = tasks.filter(t => t.dueDate && new Date(t.dueDate) <= weekEnd);
     title = '今週のタスク';
   } else if (STATE.currentView === 'overdue') {
-    tasks = tasks.filter(t => t.dueDate && new Date(t.dueDate) < now && t.dueDate.slice(0,10) !== todayStr);
+    tasks = tasks.filter(t => { const ds = dueDateStr(t.dueDate); return ds && ds < today; });
     title = '期限切れのタスク';
   } else if (STATE.currentView.startsWith('project-')) {
     const pid = STATE.currentView.replace('project-', '');
@@ -985,7 +996,6 @@ function renderTaskView() {
     title = `#${tag}`;
   }
 
-  // sort: overdue first, then by dueDate
   tasks.sort((a, b) => {
     if (!a.dueDate && !b.dueDate) return 0;
     if (!a.dueDate) return 1;
@@ -1001,22 +1011,40 @@ function renderTaskView() {
   }
 
   el.innerHTML = tasks.map(t => {
-    const due = t.dueDate ? new Date(t.dueDate) : null;
-    const isOverdue = due && due < now && t.dueDate.slice(0,10) !== todayStr;
-    const isToday = due && t.dueDate.slice(0,10) === todayStr;
+    const ds = dueDateStr(t.dueDate);
+    const isOverdue = ds && ds < today;
+    const isToday = ds === today;
     const proj = STATE.projects.find(p => p.id === t.projectId);
     const pClass = t.priority === 5 ? 'p-high' : t.priority === 3 ? 'p-mid' : 'p-low';
-    const dateStr = due ? due.toLocaleDateString('ja-JP', {month:'short',day:'numeric'}) : '';
+    const due = t.dueDate ? new Date(t.dueDate) : null;
+    const dateStr = ds ? new Date(ds + 'T00:00:00').toLocaleDateString('ja-JP', {month:'short', day:'numeric'}) : '';
+    // チェックリスト進捗
+    const items = t.items || [];
+    const itemTotal = items.length;
+    const itemDone = items.filter(i => i.status === 1).length;
+    const hasItems = itemTotal > 0;
+    const hasContent = t.content && t.content.trim();
+    const progressPct = itemTotal > 0 ? Math.round(itemDone / itemTotal * 100) : 0;
     return `
-      <div class="task-item" id="task-${t.id}">
+      <div class="task-item" id="task-${t.id}" onclick="openTaskDetail('${t.id}')" style="cursor:pointer;">
         <div class="priority-bar ${pClass}"></div>
-        <div class="task-check ${t.status===2?'done':''}" onclick="completeTask('${t.id}','${t.projectId}')"></div>
+        <div class="task-check ${t.status===2?'done':''}" onclick="event.stopPropagation();completeTask('${t.id}','${t.projectId}')"></div>
         <div class="task-body">
           <div class="task-title ${t.status===2?'done':''}">${escHtml(t.title)}</div>
+          ${hasItems ? `
+          <div style="margin-top:5px;">
+            <div style="display:flex;align-items:center;gap:6px;">
+              <div style="flex:1;height:3px;background:var(--border2);border-radius:2px;overflow:hidden;">
+                <div style="width:${progressPct}%;height:100%;background:${progressPct===100?'var(--success)':'var(--accent)'};transition:width 0.3s;"></div>
+              </div>
+              <span style="font-size:11px;color:var(--text3);white-space:nowrap;">${itemDone}/${itemTotal}</span>
+            </div>
+          </div>` : ''}
           <div class="task-meta">
             ${proj ? `<span class="tag">${escHtml(proj.name)}</span>` : ''}
             ${dateStr ? `<span class="tag ${isOverdue?'overdue':isToday?'today':''}">${isOverdue?'⚠ ':''}${dateStr}</span>` : ''}
             ${t.priority===5?'<span class="tag priority-high">高</span>':t.priority===3?'<span class="tag priority-mid">中</span>':''}
+            ${hasContent ? '<span class="tag" style="color:var(--text3);">📝</span>' : ''}
             ${(t.tags||[]).map(tg=>`<span class="tag">${escHtml(tg)}</span>`).join('')}
           </div>
         </div>
@@ -1082,8 +1110,113 @@ async function completeTask(taskId, projectId) {
     STATE.tasks = STATE.tasks.map(t => t.id === taskId ? {...t, status: 2} : t);
     updateStats();
     renderTaskView();
+    if (STATE.openTaskId === taskId) closeTaskDetail();
   } catch(e) {
     alert('完了処理に失敗しました: ' + e.message);
+  }
+}
+
+// ========== TASK DETAIL PANEL ==========
+STATE.openTaskId = null;
+
+function openTaskDetail(taskId) {
+  const task = STATE.tasks.find(t => t.id === taskId);
+  if (!task) return;
+  STATE.openTaskId = taskId;
+  const panel = document.getElementById('task-detail-panel');
+  panel.style.width = '320px';
+  renderDetailPanel(task);
+  // アクティブ状態
+  document.querySelectorAll('.task-item').forEach(el => el.style.background = '');
+  const el = document.getElementById('task-' + taskId);
+  if (el) el.style.background = 'var(--accent-bg)';
+}
+
+function closeTaskDetail() {
+  STATE.openTaskId = null;
+  const panel = document.getElementById('task-detail-panel');
+  panel.style.width = '0';
+  document.querySelectorAll('.task-item').forEach(el => el.style.background = '');
+}
+
+function renderDetailPanel(task) {
+  const panel = document.getElementById('task-detail-panel');
+  const items = task.items || [];
+  const proj = STATE.projects.find(p => p.id === task.projectId);
+  const ds = dueDateStr(task.dueDate);
+  const dateStr = ds ? new Date(ds + 'T00:00:00').toLocaleDateString('ja-JP', {year:'numeric', month:'long', day:'numeric'}) : '期限なし';
+  const itemDone = items.filter(i => i.status === 1).length;
+  const pLabel = task.priority === 5 ? '高' : task.priority === 3 ? '中' : '低';
+  const pColor = task.priority === 5 ? 'var(--danger)' : task.priority === 3 ? 'var(--warn)' : 'var(--text3)';
+
+  panel.innerHTML = `
+    <div style="padding:16px;">
+      <!-- ヘッダー -->
+      <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:14px;">
+        <div style="flex:1;">
+          <div style="font-size:15px;font-weight:500;color:var(--text);line-height:1.4;">${escHtml(task.title)}</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:3px;">${proj ? escHtml(proj.name) : ''}</div>
+        </div>
+        <button onclick="closeTaskDetail()" style="border:none;background:none;font-size:18px;color:var(--text3);cursor:pointer;padding:0;line-height:1;flex-shrink:0;">×</button>
+      </div>
+
+      <!-- メタ情報 -->
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;padding-bottom:14px;border-bottom:0.5px solid var(--border);">
+        <span style="font-size:12px;padding:3px 8px;background:var(--surface2);border-radius:99px;color:var(--text2);">📅 ${dateStr}</span>
+        <span style="font-size:12px;padding:3px 8px;background:var(--surface2);border-radius:99px;color:${pColor};">優先度：${pLabel}</span>
+        ${(task.tags||[]).map(tg => `<span style="font-size:12px;padding:3px 8px;background:var(--surface2);border-radius:99px;color:var(--text2);">#${escHtml(tg)}</span>`).join('')}
+      </div>
+
+      <!-- メモ -->
+      ${task.content ? `
+      <div style="margin-bottom:14px;padding-bottom:14px;border-bottom:0.5px solid var(--border);">
+        <div style="font-size:12px;font-weight:500;color:var(--text2);margin-bottom:6px;">📝 メモ</div>
+        <div style="font-size:13px;color:var(--text);line-height:1.7;white-space:pre-wrap;background:var(--surface2);padding:10px;border-radius:var(--radius-sm);">${escHtml(task.content)}</div>
+      </div>` : ''}
+
+      <!-- チェックリスト -->
+      ${items.length > 0 ? `
+      <div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <div style="font-size:12px;font-weight:500;color:var(--text2);">☑ チェックリスト</div>
+          <span style="font-size:11px;color:var(--text3);">${itemDone}/${items.length} 完了</span>
+        </div>
+        <div style="height:3px;background:var(--border2);border-radius:2px;margin-bottom:10px;overflow:hidden;">
+          <div style="width:${items.length>0?Math.round(itemDone/items.length*100):0}%;height:100%;background:${itemDone===items.length?'var(--success)':'var(--accent)'}"></div>
+        </div>
+        <div id="checklist-items">
+          ${items.map((item, idx) => `
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid var(--border);" id="ci-${task.id}-${idx}">
+            <div onclick="toggleCheckItem('${task.id}','${task.projectId}',${idx})"
+              style="width:16px;height:16px;border-radius:3px;border:1.5px solid ${item.status===1?'var(--success)':'var(--border2)'};background:${item.status===1?'var(--success)':'transparent'};cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;">
+              ${item.status===1?'<span style="color:white;font-size:11px;">✓</span>':''}
+            </div>
+            <span style="font-size:13px;color:var(--text);flex:1;${item.status===1?'text-decoration:line-through;color:var(--text3);':''}">${escHtml(item.title)}</span>
+          </div>`).join('')}
+        </div>
+      </div>` : '<div style="font-size:13px;color:var(--text3);text-align:center;padding:20px 0;">チェックリストなし</div>'}
+
+      <!-- 完了ボタン -->
+      ${task.status !== 2 ? `
+      <div style="margin-top:16px;">
+        <button class="btn-primary" style="width:100%;" onclick="completeTask('${task.id}','${task.projectId}')">タスクを完了にする</button>
+      </div>` : '<div style="margin-top:16px;text-align:center;font-size:13px;color:var(--success);">✓ 完了済み</div>'}
+    </div>`;
+}
+
+async function toggleCheckItem(taskId, projectId, itemIdx) {
+  const task = STATE.tasks.find(t => t.id === taskId);
+  if (!task) return;
+  const items = [...(task.items || [])];
+  items[itemIdx] = { ...items[itemIdx], status: items[itemIdx].status === 1 ? 0 : 1 };
+  try {
+    await ttPost(`/project/${projectId}/task/${taskId}`, { ...task, items });
+    STATE.tasks = STATE.tasks.map(t => t.id === taskId ? { ...t, items } : t);
+    updateStats();
+    renderTaskView();
+    renderDetailPanel({ ...task, items });
+  } catch(e) {
+    alert('更新に失敗しました: ' + e.message);
   }
 }
 
@@ -1169,18 +1302,31 @@ async function callClaude() {
 }
 
 function buildSystemPrompt() {
-  const now = new Date();
-  const todayStr = now.toLocaleDateString('ja-JP', {year:'numeric',month:'long',day:'numeric',weekday:'long'});
+  const todayStr = new Date().toLocaleDateString('ja-JP', {year:'numeric',month:'long',day:'numeric',weekday:'long'});
+  const today = todayJST();
   const active = STATE.tasks.filter(t => t.status === 0);
-  const today = active.filter(t => t.dueDate && t.dueDate.slice(0,10) === now.toISOString().slice(0,10));
-  const overdue = active.filter(t => t.dueDate && new Date(t.dueDate) < now && t.dueDate.slice(0,10) !== now.toISOString().slice(0,10));
+  const todayTasks = active.filter(t => dueDateStr(t.dueDate) === today);
+  const overdue = active.filter(t => { const ds = dueDateStr(t.dueDate); return ds && ds < today; });
   const high = active.filter(t => t.priority === 5);
+
+  // チェックリスト進捗が途中のタスク
+  const inProgress = active.filter(t => {
+    const items = t.items || [];
+    if (items.length === 0) return false;
+    const done = items.filter(i => i.status === 1).length;
+    return done > 0 && done < items.length;
+  });
 
   const taskSummary = `
 【今日の日付】${todayStr}
 【期限切れ】${overdue.length}件: ${overdue.slice(0,5).map(t=>t.title).join('、')}${overdue.length>5?'...他':''}
-【今日期限】${today.length}件: ${today.map(t=>t.title).join('、')}
+【今日期限】${todayTasks.length}件: ${todayTasks.map(t=>t.title).join('、')}
 【優先度高】${high.length}件: ${high.slice(0,5).map(t=>t.title).join('、')}
+【進行中チェックリスト】${inProgress.length}件: ${inProgress.map(t => {
+    const items = t.items || [];
+    const done = items.filter(i => i.status === 1).length;
+    return `${t.title}(${done}/${items.length})`;
+  }).join('、')}
 【全タスク数】${active.length}件
 【プロジェクト】${STATE.projects.map(p=>p.name).join('、')}
 【タグ】${(STATE.allTags||[]).join('、')}
@@ -1502,7 +1648,7 @@ async function registerExtractedTasks() {
     const prioVal = parseInt(document.getElementById(`cprio-${i}`)?.value || '0');
     try {
       const body = { title: tasks[i].title, projectId: projId, priority: prioVal };
-      if (dueVal) body.dueDate = dueVal + 'T09:00:00+0900';
+      if (dueVal) body.dueDate = dueVal + 'T00:00:00+0900';
       await ttPost('/task', body);
       count++;
     } catch(e) { errors++; }
