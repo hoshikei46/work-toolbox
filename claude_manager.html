@@ -1210,7 +1210,12 @@ async function addTask() {
 
 async function completeTask(taskId, projectId) {
   try {
-    await ttPost(`/project/${projectId}/task/${taskId}/complete`, {});
+    const r = await fetch(`${API}/project/${projectId}/task/${taskId}/complete`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${STATE.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    if (!r.ok) throw new Error(`API Error ${r.status}`);
     STATE.tasks = STATE.tasks.map(t => t.id === taskId ? {...t, status: 2} : t);
     updateStats();
     renderTaskView();
