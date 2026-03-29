@@ -209,6 +209,10 @@ button { cursor: pointer; font-family: inherit; font-size: 13px; border-radius: 
         <span>📋</span> すべて
         <span class="count" id="cnt-all">-</span>
       </div>
+      <div class="nav-item" onclick="switchView('nodate', this)">
+        <span>📌</span> 日付なし
+        <span class="count" id="cnt-nodate">-</span>
+      </div>
       <div class="nav-item" onclick="switchView('overdue', this)">
         <span>⚠️</span> 期限切れ
         <span class="count" id="cnt-overdue" style="background:#fef2f2;color:#dc2626;">-</span>
@@ -254,6 +258,38 @@ button { cursor: pointer; font-family: inherit; font-size: 13px; border-radius: 
         <!-- タスクリスト -->
         <div style="flex:1;overflow-y:auto;padding:20px;min-width:0;">
 
+          <!-- 検索・並び順バー（最上部） -->
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;flex-wrap:wrap;">
+            <input type="text" id="task-search" placeholder="🔍 タスクを検索..." oninput="renderTaskView()" onkeydown="if(event.key==='Escape'){this.value='';renderTaskView();}"
+              style="flex:1;min-width:160px;border:0.5px solid var(--border2);border-radius:var(--radius-sm);padding:7px 10px;font-size:13px;font-family:inherit;outline:none;background:var(--surface);color:var(--text);" />
+            <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
+              <span style="font-size:11px;color:var(--text3);">並び順</span>
+              <select id="task-sort-1" onchange="renderTaskView()" style="border:0.5px solid var(--border2);border-radius:var(--radius-sm);padding:5px 6px;font-size:12px;font-family:inherit;outline:none;background:var(--surface2);color:var(--text);">
+                <option value="date">日付</option>
+                <option value="priority">優先度</option>
+                <option value="project">プロジェクト</option>
+                <option value="title">タイトル</option>
+                <option value="none">なし</option>
+              </select>
+              <span style="font-size:11px;color:var(--text3);">→</span>
+              <select id="task-sort-2" onchange="renderTaskView()" style="border:0.5px solid var(--border2);border-radius:var(--radius-sm);padding:5px 6px;font-size:12px;font-family:inherit;outline:none;background:var(--surface2);color:var(--text);">
+                <option value="none">なし</option>
+                <option value="priority">優先度</option>
+                <option value="date">日付</option>
+                <option value="project">プロジェクト</option>
+                <option value="title">タイトル</option>
+              </select>
+              <span style="font-size:11px;color:var(--text3);">→</span>
+              <select id="task-sort-3" onchange="renderTaskView()" style="border:0.5px solid var(--border2);border-radius:var(--radius-sm);padding:5px 6px;font-size:12px;font-family:inherit;outline:none;background:var(--surface2);color:var(--text);">
+                <option value="none">なし</option>
+                <option value="title">タイトル</option>
+                <option value="priority">優先度</option>
+                <option value="date">日付</option>
+                <option value="project">プロジェクト</option>
+              </select>
+            </div>
+          </div>
+
           <!-- 時間管理バー -->
           <div class="card" style="margin-bottom:12px;padding:12px 16px;">
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
@@ -294,9 +330,47 @@ button { cursor: pointer; font-family: inherit; font-size: 13px; border-radius: 
             <div class="stat-card"><div class="stat-num" id="s-all">-</div><div class="stat-label">合計</div></div>
           </div>
           <div class="card">
+            <!-- クイック追加行 -->
             <div class="quick-add">
               <input type="text" id="quick-input" placeholder="タスクを追加（Enterで登録）" onkeydown="if(event.key==='Enter'&&!event.isComposing)addTask()" />
+              <button class="btn" onclick="toggleAddForm()" id="add-expand-btn" title="詳細設定">＋</button>
               <button class="btn-primary" onclick="addTask()">追加</button>
+            </div>
+            <!-- 詳細入力フォーム（展開式） -->
+            <div id="add-form-detail" style="display:none;padding-top:10px;border-top:0.5px solid var(--border);margin-top:4px;">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+                <div>
+                  <div style="font-size:11px;color:var(--text3);margin-bottom:3px;">期限日</div>
+                  <input type="date" id="add-due" style="width:100%;border:0.5px solid var(--border2);border-radius:var(--radius-sm);padding:6px 8px;font-size:13px;font-family:inherit;outline:none;background:var(--surface2);color:var(--text);" />
+                </div>
+                <div>
+                  <div style="font-size:11px;color:var(--text3);margin-bottom:3px;">優先度</div>
+                  <select id="add-priority" style="width:100%;border:0.5px solid var(--border2);border-radius:var(--radius-sm);padding:6px 8px;font-size:13px;font-family:inherit;outline:none;background:var(--surface2);color:var(--text);">
+                    <option value="0">低</option>
+                    <option value="3">中</option>
+                    <option value="5">高</option>
+                  </select>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+                <div>
+                  <div style="font-size:11px;color:var(--text3);margin-bottom:3px;">プロジェクト</div>
+                  <select id="add-project" style="width:100%;border:0.5px solid var(--border2);border-radius:var(--radius-sm);padding:6px 8px;font-size:13px;font-family:inherit;outline:none;background:var(--surface2);color:var(--text);">
+                  </select>
+                </div>
+                <div>
+                  <div style="font-size:11px;color:var(--text3);margin-bottom:3px;">見積もり時間（分）</div>
+                  <input type="number" id="add-estimated" min="5" max="480" step="5" placeholder="例: 30" style="width:100%;border:0.5px solid var(--border2);border-radius:var(--radius-sm);padding:6px 8px;font-size:13px;font-family:inherit;outline:none;background:var(--surface2);color:var(--text);" />
+                </div>
+              </div>
+              <div style="margin-bottom:8px;">
+                <div style="font-size:11px;color:var(--text3);margin-bottom:3px;">タグ（カンマ区切り）</div>
+                <input type="text" id="add-tags" placeholder="例: 依頼中, 校内事務" style="width:100%;border:0.5px solid var(--border2);border-radius:var(--radius-sm);padding:6px 8px;font-size:13px;font-family:inherit;outline:none;background:var(--surface2);color:var(--text);" />
+              </div>
+              <div>
+                <div style="font-size:11px;color:var(--text3);margin-bottom:3px;">メモ</div>
+                <textarea id="add-content" rows="2" placeholder="メモを入力..." style="width:100%;border:0.5px solid var(--border2);border-radius:var(--radius-sm);padding:6px 8px;font-size:13px;font-family:inherit;outline:none;background:var(--surface2);color:var(--text);resize:vertical;line-height:1.5;"></textarea>
+              </div>
             </div>
             <div id="task-view-title" class="card-title">今日のタスク</div>
             <div id="task-list"><div class="loading"><div class="spinner"></div>読み込み中...</div></div>
@@ -536,7 +610,8 @@ const STATE = {
   apiKey: localStorage.getItem('claude_apikey') || '',
   name: localStorage.getItem('user_name') || 'ほしの',
   role: localStorage.getItem('user_role') || '小学校事務職員',
-  projects: [],
+  projects: [],      // 表示用（hidden除外済み）
+  allProjects: [],   // タスク取得用（全プロジェクト）
   tasks: [],
   allTags: [],
   currentView: 'today',
@@ -599,6 +674,7 @@ async function refreshAll() {
   btn.textContent = '更新中...';
   btn.disabled = true;
   await loadProjects();
+  await new Promise(r => setTimeout(r, 2000));
   await loadTasks();
   btn.textContent = '↻ 更新';
   btn.disabled = false;
@@ -638,9 +714,9 @@ async function ttPatch(path, body) {
 async function loadProjects() {
   try {
     const projects = await ttGet('/project');
-    // アーカイブ済み・クローズ済みを除外
     const active = projects.filter(p => !p.closed && p.permission !== 'none');
-    STATE.projects = active;
+    STATE.allProjects = active; // 全プロジェクトを保存（タスク取得用）
+    STATE.projects = active;   // 表示用（renderProjectsでhidden除外）
     renderProjects(active);
     document.getElementById('conn-dot').style.background = '#22c55e';
     document.getElementById('conn-status').textContent = `接続済み（${active.length}件）`;
@@ -653,10 +729,19 @@ async function loadProjects() {
 async function loadTasks() {
   const el = document.getElementById('task-list');
   if (el) el.innerHTML = '<div class="loading"><div class="spinner"></div>タスク取得中...</div>';
-  STATE.tasks = []; // キャッシュを完全クリア
+  STATE.tasks = [];
 
   const all = [];
-  for (const p of STATE.projects) {
+
+  // 受信トレイのタスクを取得
+  try {
+    const inbox = await ttGet('/project/inbox/data');
+    if (inbox.tasks) all.push(...inbox.tasks);
+  } catch(e) {}
+
+  // 全プロジェクトからタスクを取得
+  const targetProjects = STATE.allProjects.length > 0 ? STATE.allProjects : STATE.projects;
+  for (const p of targetProjects) {
     try {
       const pd = await ttGet(`/project/${p.id}/data`);
       if (pd.tasks) all.push(...pd.tasks);
@@ -1061,6 +1146,7 @@ function updateStats() {
     const ds = dueDateStr(t.dueDate);
     return ds && ds < today;
   });
+  const nodateTasks = active.filter(t => !t.dueDate);
   document.getElementById('s-today').textContent = todayTasks.length;
   document.getElementById('s-week').textContent = weekTasks.length;
   document.getElementById('s-overdue').textContent = overdueTasks.length;
@@ -1068,6 +1154,7 @@ function updateStats() {
   document.getElementById('cnt-today').textContent = todayTasks.length;
   document.getElementById('cnt-week').textContent = weekTasks.length;
   document.getElementById('cnt-all').textContent = active.length;
+  document.getElementById('cnt-nodate').textContent = nodateTasks.length;
   document.getElementById('cnt-overdue').textContent = overdueTasks.length;
   collectAndRenderTags(active);
 }
@@ -1087,6 +1174,9 @@ function renderTaskView() {
   } else if (STATE.currentView === 'week') {
     tasks = tasks.filter(t => t.dueDate && new Date(t.dueDate) <= weekEnd);
     title = '今週のタスク';
+  } else if (STATE.currentView === 'nodate') {
+    tasks = tasks.filter(t => !t.dueDate);
+    title = '日付なしのタスク';
   } else if (STATE.currentView === 'overdue') {
     tasks = tasks.filter(t => { const ds = dueDateStr(t.dueDate); return ds && ds < today; });
     title = '期限切れのタスク';
@@ -1101,11 +1191,39 @@ function renderTaskView() {
     title = `#${tag}`;
   }
 
+  // 検索フィルター（検索中は全タスクから検索）
+  const searchQuery = document.getElementById('task-search')?.value.trim().toLowerCase() || '';
+  if (searchQuery) {
+    tasks = STATE.tasks.filter(t => t.status === 0 &&
+      (t.title.toLowerCase().includes(searchQuery) ||
+       (t.content || '').toLowerCase().includes(searchQuery) ||
+       (t.tags || []).some(tg => tg.toLowerCase().includes(searchQuery)))
+    );
+    title = `検索: "${searchQuery}"`;
+  }
+
+  // 並び順（3段階）
+  const sortKeys = [
+    document.getElementById('task-sort-1')?.value || 'date',
+    document.getElementById('task-sort-2')?.value || 'none',
+    document.getElementById('task-sort-3')?.value || 'none',
+  ].filter(k => k !== 'none');
+
+  function sortVal(t, key) {
+    if (key === 'priority') return -(t.priority || 0);
+    if (key === 'date') return t.dueDate ? new Date(t.dueDate).getTime() : 9999999999999;
+    if (key === 'project') return STATE.projects.find(p => p.id === t.projectId)?.name || '';
+    if (key === 'title') return t.title.toLowerCase();
+    return 0;
+  }
+
   tasks.sort((a, b) => {
-    if (!a.dueDate && !b.dueDate) return 0;
-    if (!a.dueDate) return 1;
-    if (!b.dueDate) return -1;
-    return new Date(a.dueDate) - new Date(b.dueDate);
+    for (const key of sortKeys) {
+      const va = sortVal(a, key), vb = sortVal(b, key);
+      if (va < vb) return -1;
+      if (va > vb) return 1;
+    }
+    return 0;
   });
 
   titleEl.textContent = title + `（${tasks.length}件）`;
@@ -1194,16 +1312,78 @@ function switchTab(tab) {
   }
 }
 
+function toggleAddForm() {
+  const form = document.getElementById('add-form-detail');
+  const btn = document.getElementById('add-expand-btn');
+  const isOpen = form.style.display !== 'none';
+  form.style.display = isOpen ? 'none' : 'block';
+  btn.textContent = isOpen ? '＋' : '－';
+  if (!isOpen) {
+    // プロジェクト一覧を更新
+    const sel = document.getElementById('add-project');
+    sel.innerHTML = STATE.projects.map(p => `<option value="${escHtml(p.id)}">${escHtml(p.name)}</option>`).join('');
+    // 現在のビューがプロジェクトなら選択
+    if (STATE.currentView.startsWith('project-')) {
+      sel.value = STATE.currentView.replace('project-', '');
+    }
+    // ビューに応じて初期日付を設定
+    const dueInput = document.getElementById('add-due');
+    if (STATE.currentView === 'today' || STATE.currentView === 'week') {
+      dueInput.value = todayJST();  // 今日・今週ビューは今日の日付
+    } else {
+      dueInput.value = '';  // 日付なし・プロジェクト・タグビューは空
+    }
+  }
+}
+
 async function addTask() {
   const input = document.getElementById('quick-input');
   const title = input.value.trim();
   if (!title) return;
   input.value = '';
+
+  // 詳細フォームの値を取得
+  const formOpen = document.getElementById('add-form-detail').style.display !== 'none';
+  const dueVal = formOpen
+    ? document.getElementById('add-due').value
+    : (STATE.currentView === 'today' || STATE.currentView === 'week') ? todayJST() : '';
+  const priority = formOpen ? parseInt(document.getElementById('add-priority').value || '0') : 0;
+  const tagsRaw = formOpen ? document.getElementById('add-tags').value : '';
+  const tags = tagsRaw ? tagsRaw.split(',').map(t => t.trim()).filter(Boolean) : [];
+  const content = formOpen ? document.getElementById('add-content').value.trim() : '';
+  const estVal = formOpen ? document.getElementById('add-estimated').value : '';
+
+  // プロジェクト決定
+  let projId;
+  if (formOpen) {
+    projId = document.getElementById('add-project').value;
+  } else if (STATE.currentView.startsWith('project-')) {
+    projId = STATE.currentView.replace('project-', '');
+  } else {
+    projId = STATE.projects.find(p => p.name.includes('Active') || p.name.includes('Next'))?.id || STATE.projects[0]?.id;
+  }
+
   try {
-    const proj = STATE.currentView.startsWith('project-')
-      ? STATE.currentView.replace('project-','')
-      : STATE.projects.find(p => p.name.includes('Active') || p.name.includes('Next'))?.id || STATE.projects[0]?.id;
-    await ttPost('/task', { title, projectId: proj });
+    const body = { title, projectId: projId, priority, tags, content };
+    if (dueVal) body.dueDate = dueVal + 'T00:00:00+0900';
+    const result = await ttPost('/task', body);
+
+    // 見積もり時間を保存
+    if (estVal && parseInt(estVal) > 0 && result?.id) {
+      STATE.estimatedMinutes[result.id] = parseInt(estVal);
+      localStorage.setItem('estimated_minutes', JSON.stringify(STATE.estimatedMinutes));
+    }
+
+    // フォームをリセット
+    if (formOpen) {
+      document.getElementById('add-due').value = '';
+      document.getElementById('add-priority').value = '0';
+      document.getElementById('add-tags').value = '';
+      document.getElementById('add-content').value = '';
+      document.getElementById('add-estimated').value = '';
+    }
+
+    await new Promise(r => setTimeout(r, 2000));
     await loadTasks();
   } catch(e) {
     alert('タスクの追加に失敗しました: ' + e.message);
