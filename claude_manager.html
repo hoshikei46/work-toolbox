@@ -189,7 +189,7 @@ button { cursor: pointer; font-family: inherit; font-size: 13px; border-radius: 
     <h1>Claude Manager</h1>
     <span class="status-text" id="conn-status">接続中...</span>
     <div class="right">
-      <button class="btn" onclick="loadProjects()">↻ 更新</button>
+      <button class="btn" id="refresh-btn" onclick="refreshAll()">↻ 更新</button>
     </div>
   </div>
 
@@ -501,6 +501,16 @@ async function loadAll() {
   await loadTasks();
 }
 
+async function refreshAll() {
+  const btn = document.getElementById('refresh-btn');
+  btn.textContent = '更新中...';
+  btn.disabled = true;
+  await loadProjects();
+  await loadTasks();
+  btn.textContent = '↻ 更新';
+  btn.disabled = false;
+}
+
 // ========== TICKTICK API ==========
 async function ttGet(path) {
   const r = await fetch(API + path, {
@@ -546,36 +556,21 @@ async function loadProjects() {
 }
 
 async function loadTasks() {
-  try {
-    const data = await ttGet('/project/all/closed?status=0');
-    if (data && data.tasks) {
-      STATE.tasks = data.tasks;
-    } else {
-      // fallback: load per project
-      let all = [];
-      for (const p of STATE.projects) {
-        try {
-          const pd = await ttGet(`/project/${p.id}/data`);
-          if (pd.tasks) all = all.concat(pd.tasks);
-        } catch(e) {}
-      }
-      STATE.tasks = all;
-    }
-    updateStats();
-    renderTaskView();
-  } catch(e) {
-    // try per-project
-    let all = [];
-    for (const p of STATE.projects) {
-      try {
-        const pd = await ttGet(`/project/${p.id}/data`);
-        if (pd.tasks) all = all.concat(pd.tasks);
-      } catch(e2) {}
-    }
-    STATE.tasks = all;
-    updateStats();
-    renderTaskView();
+  const el = document.getElementById('task-list');
+  if (el) el.innerHTML = '<div class="loading"><div class="spinner"></div>タスク取得中...</div>';
+
+  const all = [];
+  for (const p of STATE.projects) {
+    try {
+      const pd = await ttGet(`/project/${p.id}/data`);
+      if (pd.tasks) all.push(...pd.tasks);
+      // TickTick APIのレート制限対策：100ms待機
+      await new Promise(r => setTimeout(r, 100));
+    } catch(e) {}
   }
+  STATE.tasks = all;
+  updateStats();
+  renderTaskView();
 }
 
 // ========== RENDER ==========
