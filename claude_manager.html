@@ -215,14 +215,6 @@ button { cursor: pointer; font-family: inherit; font-size: 13px; border-radius: 
       </div>
     </div>
     <div class="nav-section">
-      <div class="nav-section-label">プロジェクト</div>
-      <div id="project-list"></div>
-    </div>
-    <div class="nav-section">
-      <div class="nav-section-label">タグ</div>
-      <div id="tag-list"></div>
-    </div>
-    <div class="nav-section">
       <div class="nav-section-label">Claude</div>
       <div class="nav-item" onclick="switchTab('chat')">
         <span>💬</span> チャット
@@ -236,6 +228,14 @@ button { cursor: pointer; font-family: inherit; font-size: 13px; border-radius: 
       <div class="nav-item" onclick="switchTab('settings')">
         <span>⚙️</span> 設定
       </div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-label">プロジェクト</div>
+      <div id="project-list"></div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-label">タグ</div>
+      <div id="tag-list"></div>
     </div>
   </div>
 
@@ -295,7 +295,7 @@ button { cursor: pointer; font-family: inherit; font-size: 13px; border-radius: 
           </div>
           <div class="card">
             <div class="quick-add">
-              <input type="text" id="quick-input" placeholder="タスクを追加（Enterで登録）" onkeydown="if(event.key==='Enter')addTask()" />
+              <input type="text" id="quick-input" placeholder="タスクを追加（Enterで登録）" onkeydown="if(event.key==='Enter'&&!event.isComposing)addTask()" />
               <button class="btn-primary" onclick="addTask()">追加</button>
             </div>
             <div id="task-view-title" class="card-title">今日のタスク</div>
@@ -378,7 +378,7 @@ button { cursor: pointer; font-family: inherit; font-size: 13px; border-radius: 
             </div>
           </div>
           <div style="padding:14px 20px;border-top:0.5px solid var(--border);background:var(--surface);display:flex;gap:8px;">
-            <textarea id="extract-chat-input" placeholder="Claudeに追加の指示や質問を..." style="flex:1;border:0.5px solid var(--border2);border-radius:var(--radius-sm);padding:9px 12px;font-size:14px;font-family:inherit;resize:none;outline:none;background:var(--surface2);color:var(--text);line-height:1.5;height:42px;" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendExtractChat();}"></textarea>
+            <textarea id="extract-chat-input" placeholder="Claudeに追加の指示や質問を..." style="flex:1;border:0.5px solid var(--border2);border-radius:var(--radius-sm);padding:9px 12px;font-size:14px;font-family:inherit;resize:none;outline:none;background:var(--surface2);color:var(--text);line-height:1.5;height:42px;" onkeydown="if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();sendExtractChat();}"></textarea>
             <button class="btn-primary" id="extract-send-btn" onclick="sendExtractChat()">送信</button>
           </div>
         </div>
@@ -1642,7 +1642,7 @@ async function estimateTaskTimes(tasks) {
 
 // ========== CLAUDE CHAT ==========
 function handleChatKey(e) {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendChat(); }
 }
 
 async function sendChat() {
