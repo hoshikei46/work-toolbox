@@ -219,6 +219,10 @@ button { cursor: pointer; font-family: inherit; font-size: 13px; border-radius: 
       <div id="project-list"></div>
     </div>
     <div class="nav-section">
+      <div class="nav-section-label">タグ</div>
+      <div id="tag-list"></div>
+    </div>
+    <div class="nav-section">
       <div class="nav-section-label">Claude</div>
       <div class="nav-item" onclick="switchTab('chat')">
         <span>💬</span> チャット
@@ -452,6 +456,7 @@ const STATE = {
   role: localStorage.getItem('user_role') || '小学校事務職員',
   projects: [],
   tasks: [],
+  allTags: [],
   currentView: 'today',
   currentProject: null,
   chatHistory: [],
@@ -642,6 +647,37 @@ function updateStats() {
   document.getElementById('cnt-week').textContent = week.length;
   document.getElementById('cnt-all').textContent = active.length;
   document.getElementById('cnt-overdue').textContent = overdue.length;
+  collectAndRenderTags(active);
+}
+
+function collectAndRenderTags(activeTasks) {
+  // タスクからタグを収集してカウント
+  const tagMap = {};
+  activeTasks.forEach(t => {
+    (t.tags || []).forEach(tag => {
+      tagMap[tag] = (tagMap[tag] || 0) + 1;
+    });
+  });
+  // タグ数の多い順にソート
+  const sorted = Object.entries(tagMap).sort((a, b) => b[1] - a[1]);
+  STATE.allTags = sorted.map(([name]) => name);
+  renderTagList(sorted);
+}
+
+function renderTagList(tagEntries) {
+  const el = document.getElementById('tag-list');
+  if (!el) return;
+  if (tagEntries.length === 0) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:4px 8px;">タグなし</div>';
+    return;
+  }
+  el.innerHTML = tagEntries.map(([name, count]) => `
+    <div class="nav-item" onclick="switchView('tag-${escHtml(name)}', this)">
+      <span style="font-size:11px;color:var(--text3);">#</span>
+      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${escHtml(name)}</span>
+      <span class="count">${count}</span>
+    </div>
+  `).join('');
 }
 
 function renderTaskView() {
@@ -667,6 +703,10 @@ function renderTaskView() {
     tasks = tasks.filter(t => t.projectId === pid);
     const proj = STATE.projects.find(p => p.id === pid);
     title = proj ? proj.name : 'プロジェクト';
+  } else if (STATE.currentView.startsWith('tag-')) {
+    const tag = STATE.currentView.replace('tag-', '');
+    tasks = tasks.filter(t => (t.tags || []).includes(tag));
+    title = `#${tag}`;
   }
 
   // sort: overdue first, then by dueDate
@@ -857,6 +897,7 @@ function buildSystemPrompt() {
 【優先度高】${high.length}件: ${high.slice(0,5).map(t=>t.title).join('、')}
 【全タスク数】${active.length}件
 【プロジェクト】${STATE.projects.map(p=>p.name).join('、')}
+【タグ】${(STATE.allTags||[]).join('、')}
 `;
 
   return `あなたは${STATE.name}さん（${STATE.role}）の専任タスクマネージャーです。TickTickと連携して、タスク管理の破綻を防ぐことがミッションです。
