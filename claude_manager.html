@@ -253,6 +253,40 @@ button { cursor: pointer; font-family: inherit; font-size: 13px; border-radius: 
       <div style="display:flex;height:100%;overflow:hidden;">
         <!-- タスクリスト -->
         <div style="flex:1;overflow-y:auto;padding:20px;min-width:0;">
+
+          <!-- 時間管理バー -->
+          <div class="card" style="margin-bottom:12px;padding:12px 16px;">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <div style="font-size:12px;font-weight:500;color:var(--text2);">本日の作業時間</div>
+              <div style="display:flex;align-items:center;gap:4px;">
+                <span style="font-size:11px;color:var(--text3);">勤務</span>
+                <input type="time" id="today-work-start" style="font-size:12px;padding:2px 6px;border:0.5px solid var(--border2);border-radius:4px;background:var(--surface2);color:var(--text);outline:none;" onchange="updateTodaySchedule()" />
+                <span style="font-size:11px;color:var(--text3);">〜</span>
+                <input type="time" id="today-work-end" style="font-size:12px;padding:2px 6px;border:0.5px solid var(--border2);border-radius:4px;background:var(--surface2);color:var(--text);outline:none;" onchange="updateTodaySchedule()" />
+              </div>
+              <div style="display:flex;align-items:center;gap:4px;">
+                <span style="font-size:11px;color:var(--text3);">作業可能</span>
+                <input type="number" id="today-available" min="0" max="12" step="0.5" style="width:60px;font-size:12px;padding:2px 6px;border:0.5px solid var(--border2);border-radius:4px;background:var(--surface2);color:var(--text);outline:none;" onchange="updateTodaySchedule()" />
+                <span style="font-size:11px;color:var(--text3);">h</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:4px;">
+                <span style="font-size:11px;color:var(--text3);">残業</span>
+                <input type="number" id="today-overtime" min="0" max="5" step="0.5" value="0" style="width:50px;font-size:12px;padding:2px 6px;border:0.5px solid var(--border2);border-radius:4px;background:var(--surface2);color:var(--text);outline:none;" onchange="updateTodaySchedule()" />
+                <span style="font-size:11px;color:var(--text3);">h</span>
+              </div>
+              <button class="btn" style="font-size:11px;padding:3px 8px;margin-left:auto;" onclick="resetTodaySchedule()">リセット</button>
+            </div>
+            <!-- プログレスバー -->
+            <div style="margin-top:10px;">
+              <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                <span style="font-size:11px;color:var(--text3);" id="time-bar-label">タスク合計: 計算中...</span>
+                <span style="font-size:11px;color:var(--text3);" id="time-bar-remaining"></span>
+              </div>
+              <div style="height:6px;background:var(--border2);border-radius:3px;overflow:hidden;">
+                <div id="time-bar-fill" style="height:100%;background:var(--accent);border-radius:3px;transition:width 0.3s;width:0%;"></div>
+              </div>
+            </div>
+          </div>
           <div class="stats-grid">
             <div class="stat-card"><div class="stat-num" id="s-today">-</div><div class="stat-label">今日</div></div>
             <div class="stat-card"><div class="stat-num" id="s-week">-</div><div class="stat-label">今週</div></div>
@@ -417,6 +451,43 @@ button { cursor: pointer; font-family: inherit; font-size: 13px; border-radius: 
           </div>
         </div>
 
+        <!-- スケジュール・時間管理設定 -->
+        <div class="card">
+          <div class="card-title">スケジュール・時間管理設定</div>
+          <div class="settings-row">
+            <div class="settings-label">
+              <strong>基本勤務時間</strong>
+              <span>平日のデフォルト勤務時間</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <input class="settings-input" type="time" id="settings-work-start" value="08:15" style="width:120px;" />
+              <span style="font-size:13px;color:var(--text3);">〜</span>
+              <input class="settings-input" type="time" id="settings-work-end" value="16:45" style="width:120px;" />
+            </div>
+          </div>
+          <div class="settings-row">
+            <div class="settings-label">
+              <strong>デフォルト作業可能時間</strong>
+              <span>1日の実質作業可能時間（休憩・雑務除く）</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <input class="settings-input" type="number" id="settings-default-available" value="5.5" min="0" max="12" step="0.5" style="width:80px;" />
+              <span style="font-size:13px;color:var(--text3);">時間</span>
+            </div>
+          </div>
+          <div class="settings-row">
+            <div class="settings-label">
+              <strong>プライベートタグ</strong>
+              <span>勤務時間外に行うタスクのタグ（カンマ区切り）</span>
+            </div>
+            <input class="settings-input" type="text" id="settings-private-tags" placeholder="Family, Personal" style="width:280px;" />
+          </div>
+          <div style="margin-top:16px;">
+            <button class="btn-primary" onclick="saveScheduleSettings()">保存</button>
+          </div>
+          <div id="schedule-settings-status" style="margin-top:8px;font-size:13px;color:var(--text3);"></div>
+        </div>
+
         <!-- プロジェクト表示設定 -->
         <div class="card">
           <div class="card-title">プロジェクトの並び替え・グループ化</div>
@@ -471,6 +542,23 @@ const STATE = {
   currentView: 'today',
   currentProject: null,
   chatHistory: [],
+  // 時間管理
+  schedule: {
+    workStart: localStorage.getItem('work_start') || '08:15',
+    workEnd: localStorage.getItem('work_end') || '16:45',
+    defaultAvailable: parseFloat(localStorage.getItem('default_available') || '5.5'),
+    privateTagsJson: localStorage.getItem('private_tags') || '["Family","Personal","koufuri+"]',
+  },
+  today: {
+    available: null,      // その日の作業可能時間（nullなら設定なし→デフォルト使用）
+    overtime: 0,          // 残業時間
+    busySlots: [],        // [{start:'10:00', end:'12:00', label:'会議'}]
+    isWorkday: null,      // null=未設定、true/false
+    customWorkStart: null,
+    customWorkEnd: null,
+    date: null,           // 設定した日付（日付が変わったらリセット）
+  },
+  estimatedMinutes: JSON.parse(localStorage.getItem('estimated_minutes') || '{}'), // taskId -> minutes
 };
 
 const API = 'https://ticktick.com/open/v1';
@@ -478,14 +566,27 @@ const API = 'https://ticktick.com/open/v1';
 // ========== INIT ==========
 window.onload = async () => {
   loadSettingsUI();
+  resetTodayIfNewDay();
   await loadAll();
 };
+
+function resetTodayIfNewDay() {
+  const today = todayJST();
+  if (STATE.today.date !== today) {
+    STATE.today = { available: null, overtime: 0, busySlots: [], isWorkday: null, customWorkStart: null, customWorkEnd: null, date: today };
+  }
+}
 
 function loadSettingsUI() {
   document.getElementById('settings-token').value = STATE.token;
   document.getElementById('settings-apikey').value = STATE.apiKey;
   document.getElementById('settings-name').value = STATE.name;
   document.getElementById('settings-role').value = STATE.role;
+  document.getElementById('settings-work-start').value = STATE.schedule.workStart;
+  document.getElementById('settings-work-end').value = STATE.schedule.workEnd;
+  document.getElementById('settings-default-available').value = STATE.schedule.defaultAvailable;
+  document.getElementById('settings-private-tags').value = getPrivateTags().join(', ');
+  initTodayUI();
 }
 
 async function loadAll() {
@@ -563,6 +664,8 @@ async function loadTasks() {
   STATE.tasks = all;
   updateStats();
   renderTaskView();
+  initTodayUI();
+  estimateTaskTimes(STATE.tasks);
 }
 
 // ========== RENDER ==========
@@ -1045,6 +1148,7 @@ function renderTaskView() {
             ${dateStr ? `<span class="tag ${isOverdue?'overdue':isToday?'today':''}">${isOverdue?'⚠ ':''}${dateStr}</span>` : ''}
             ${t.priority===5?'<span class="tag priority-high">高</span>':t.priority===3?'<span class="tag priority-mid">中</span>':''}
             ${hasContent ? '<span class="tag" style="color:var(--text3);">📝</span>' : ''}
+            ${(()=>{ const m=getEstimatedMinutes(t); return m!==null?`<span class="tag" style="background:var(--accent-bg);color:var(--accent);">⏱ ${formatMinutes(m)}</span>`:''; })()}
             ${(t.tags||[]).map(tg=>`<span class="tag">${escHtml(tg)}</span>`).join('')}
           </div>
         </div>
@@ -1139,42 +1243,140 @@ function closeTaskDetail() {
   document.querySelectorAll('.task-item').forEach(el => el.style.background = '');
 }
 
-function renderDetailPanel(task) {
+function renderDetailPanel(task, editMode = false) {
   const panel = document.getElementById('task-detail-panel');
   const items = task.items || [];
   const proj = STATE.projects.find(p => p.id === task.projectId);
   const ds = dueDateStr(task.dueDate);
-  const dateStr = ds ? new Date(ds + 'T00:00:00').toLocaleDateString('ja-JP', {year:'numeric', month:'long', day:'numeric'}) : '期限なし';
   const itemDone = items.filter(i => i.status === 1).length;
-  const pLabel = task.priority === 5 ? '高' : task.priority === 3 ? '中' : '低';
-  const pColor = task.priority === 5 ? 'var(--danger)' : task.priority === 3 ? 'var(--warn)' : 'var(--text3)';
+  const progressPct = items.length > 0 ? Math.round(itemDone / items.length * 100) : 0;
 
-  panel.innerHTML = `
+  const projectOptions = STATE.projects.map(p =>
+    `<option value="${escHtml(p.id)}" ${p.id === task.projectId ? 'selected' : ''}>${escHtml(p.name)}</option>`
+  ).join('');
+
+  if (editMode) {
+    // ========== 編集モード ==========
+    panel.innerHTML = `
     <div style="padding:16px;">
-      <!-- ヘッダー -->
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+        <div style="font-size:13px;font-weight:500;color:var(--text);flex:1;">タスクを編集</div>
+        <button onclick="renderDetailPanel(STATE.tasks.find(t=>t.id==='${task.id}'))" style="border:none;background:none;font-size:12px;color:var(--text3);cursor:pointer;padding:4px 8px;border:0.5px solid var(--border2);border-radius:4px;">キャンセル</button>
+        <button onclick="closeTaskDetail()" style="border:none;background:none;font-size:18px;color:var(--text3);cursor:pointer;padding:0;line-height:1;">×</button>
+      </div>
+
+      <!-- 見積もり時間 -->
+      <div style="margin-bottom:12px;">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">見積もり時間（分）</div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <input type="number" id="edit-estimated" min="5" max="480" step="5"
+            value="${STATE.estimatedMinutes[task.id] ?? (task.estimatedDuration ? Math.round(task.estimatedDuration/60) : '')}"
+            placeholder="例: 30"
+            style="width:100px;border:0.5px solid var(--border2);border-radius:var(--radius-sm);padding:7px 10px;font-size:14px;font-family:inherit;outline:none;background:var(--surface2);color:var(--text);" />
+          <span style="font-size:13px;color:var(--text3);">分</span>
+          ${STATE.estimatedMinutes[task.id] ? '<span style="font-size:11px;color:var(--accent);">手動設定済み</span>' : task.estimatedDuration ? '<span style="font-size:11px;color:var(--text3);">TickTick値</span>' : '<span style="font-size:11px;color:var(--text3);">Claude推定</span>'}
+        </div>
+      </div>
+
+      <!-- タイトル -->
+      <div style="margin-bottom:12px;">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">タイトル</div>
+        <input type="text" id="edit-title" value="${escHtml(task.title)}"
+          style="width:100%;border:0.5px solid var(--border2);border-radius:var(--radius-sm);padding:7px 10px;font-size:14px;font-family:inherit;outline:none;background:var(--surface2);color:var(--text);" />
+      </div>
+
+      <!-- 期限日 -->
+      <div style="margin-bottom:12px;">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">期限日</div>
+        <input type="date" id="edit-due" value="${ds||''}"
+          style="width:100%;border:0.5px solid var(--border2);border-radius:var(--radius-sm);padding:7px 10px;font-size:14px;font-family:inherit;outline:none;background:var(--surface2);color:var(--text);" />
+      </div>
+
+      <!-- 優先度 -->
+      <div style="margin-bottom:12px;">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">優先度</div>
+        <select id="edit-priority"
+          style="width:100%;border:0.5px solid var(--border2);border-radius:var(--radius-sm);padding:7px 10px;font-size:14px;font-family:inherit;outline:none;background:var(--surface2);color:var(--text);">
+          <option value="0" ${task.priority===0||!task.priority?'selected':''}>低</option>
+          <option value="3" ${task.priority===3?'selected':''}>中</option>
+          <option value="5" ${task.priority===5?'selected':''}>高</option>
+        </select>
+      </div>
+
+      <!-- プロジェクト -->
+      <div style="margin-bottom:12px;">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">プロジェクト</div>
+        <select id="edit-project"
+          style="width:100%;border:0.5px solid var(--border2);border-radius:var(--radius-sm);padding:7px 10px;font-size:14px;font-family:inherit;outline:none;background:var(--surface2);color:var(--text);">
+          ${projectOptions}
+        </select>
+      </div>
+
+      <!-- タグ -->
+      <div style="margin-bottom:12px;">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">タグ（カンマ区切り）</div>
+        <input type="text" id="edit-tags" value="${escHtml((task.tags||[]).join(', '))}" placeholder="例: 依頼中, 校内事務"
+          style="width:100%;border:0.5px solid var(--border2);border-radius:var(--radius-sm);padding:7px 10px;font-size:14px;font-family:inherit;outline:none;background:var(--surface2);color:var(--text);" />
+      </div>
+
+      <!-- メモ -->
+      <div style="margin-bottom:12px;">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">メモ</div>
+        <textarea id="edit-content" rows="4"
+          style="width:100%;border:0.5px solid var(--border2);border-radius:var(--radius-sm);padding:7px 10px;font-size:13px;font-family:inherit;outline:none;background:var(--surface2);color:var(--text);resize:vertical;line-height:1.6;">${escHtml(task.content||'')}</textarea>
+      </div>
+
+      <!-- チェックリスト編集 -->
+      <div style="margin-bottom:14px;">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:6px;">チェックリスト</div>
+        <div id="edit-checklist">
+          ${items.map((item, idx) => `
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;" id="edit-ci-${idx}">
+            <input type="text" value="${escHtml(item.title)}" id="edit-ci-text-${idx}"
+              style="flex:1;border:0.5px solid var(--border2);border-radius:4px;padding:5px 8px;font-size:13px;font-family:inherit;outline:none;background:var(--surface2);color:var(--text);" />
+            <button onclick="removeCheckItem(${idx})" style="border:none;background:none;color:var(--danger);cursor:pointer;font-size:16px;padding:2px;flex-shrink:0;">×</button>
+          </div>`).join('')}
+        </div>
+        <button onclick="addCheckItemInput()" class="btn" style="width:100%;margin-top:4px;font-size:12px;padding:5px;">+ 項目を追加</button>
+      </div>
+
+      <!-- 保存ボタン -->
+      <button class="btn-primary" style="width:100%;" onclick="saveTaskEdit('${task.id}','${task.projectId}')">TickTickに保存する</button>
+      <div id="edit-save-status" style="margin-top:8px;font-size:12px;text-align:center;color:var(--text3);"></div>
+    </div>`;
+
+    // チェックリスト項目カウンタ（追加用）
+    window._editItemCount = items.length;
+
+  } else {
+    // ========== 表示モード ==========
+    const dateStr = ds ? new Date(ds + 'T00:00:00').toLocaleDateString('ja-JP', {year:'numeric', month:'long', day:'numeric'}) : '期限なし';
+    const pLabel = task.priority === 5 ? '高' : task.priority === 3 ? '中' : '低';
+    const pColor = task.priority === 5 ? 'var(--danger)' : task.priority === 3 ? 'var(--warn)' : 'var(--text3)';
+
+    panel.innerHTML = `
+    <div style="padding:16px;">
       <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:14px;">
         <div style="flex:1;">
           <div style="font-size:15px;font-weight:500;color:var(--text);line-height:1.4;">${escHtml(task.title)}</div>
           <div style="font-size:12px;color:var(--text3);margin-top:3px;">${proj ? escHtml(proj.name) : ''}</div>
         </div>
-        <button onclick="closeTaskDetail()" style="border:none;background:none;font-size:18px;color:var(--text3);cursor:pointer;padding:0;line-height:1;flex-shrink:0;">×</button>
+        <button onclick="renderDetailPanel(STATE.tasks.find(t=>t.id==='${task.id}'),true)" class="btn" style="font-size:12px;padding:4px 10px;flex-shrink:0;">編集</button>
+        <button onclick="closeTaskDetail()" style="border:none;background:none;font-size:18px;color:var(--text3);cursor:pointer;padding:0;line-height:1;flex-shrink:0;margin-left:4px;">×</button>
       </div>
 
-      <!-- メタ情報 -->
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;padding-bottom:14px;border-bottom:0.5px solid var(--border);">
         <span style="font-size:12px;padding:3px 8px;background:var(--surface2);border-radius:99px;color:var(--text2);">📅 ${dateStr}</span>
         <span style="font-size:12px;padding:3px 8px;background:var(--surface2);border-radius:99px;color:${pColor};">優先度：${pLabel}</span>
         ${(task.tags||[]).map(tg => `<span style="font-size:12px;padding:3px 8px;background:var(--surface2);border-radius:99px;color:var(--text2);">#${escHtml(tg)}</span>`).join('')}
       </div>
 
-      <!-- メモ -->
       ${task.content ? `
       <div style="margin-bottom:14px;padding-bottom:14px;border-bottom:0.5px solid var(--border);">
         <div style="font-size:12px;font-weight:500;color:var(--text2);margin-bottom:6px;">📝 メモ</div>
         <div style="font-size:13px;color:var(--text);line-height:1.7;white-space:pre-wrap;background:var(--surface2);padding:10px;border-radius:var(--radius-sm);">${escHtml(task.content)}</div>
       </div>` : ''}
 
-      <!-- チェックリスト -->
       ${items.length > 0 ? `
       <div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
@@ -1182,26 +1384,108 @@ function renderDetailPanel(task) {
           <span style="font-size:11px;color:var(--text3);">${itemDone}/${items.length} 完了</span>
         </div>
         <div style="height:3px;background:var(--border2);border-radius:2px;margin-bottom:10px;overflow:hidden;">
-          <div style="width:${items.length>0?Math.round(itemDone/items.length*100):0}%;height:100%;background:${itemDone===items.length?'var(--success)':'var(--accent)'}"></div>
+          <div style="width:${progressPct}%;height:100%;background:${progressPct===100?'var(--success)':'var(--accent)'}"></div>
         </div>
-        <div id="checklist-items">
-          ${items.map((item, idx) => `
-          <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid var(--border);" id="ci-${task.id}-${idx}">
-            <div onclick="toggleCheckItem('${task.id}','${task.projectId}',${idx})"
-              style="width:16px;height:16px;border-radius:3px;border:1.5px solid ${item.status===1?'var(--success)':'var(--border2)'};background:${item.status===1?'var(--success)':'transparent'};cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;">
-              ${item.status===1?'<span style="color:white;font-size:11px;">✓</span>':''}
-            </div>
-            <span style="font-size:13px;color:var(--text);flex:1;${item.status===1?'text-decoration:line-through;color:var(--text3);':''}">${escHtml(item.title)}</span>
-          </div>`).join('')}
-        </div>
-      </div>` : '<div style="font-size:13px;color:var(--text3);text-align:center;padding:20px 0;">チェックリストなし</div>'}
+        ${items.map((item, idx) => `
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid var(--border);">
+          <div onclick="toggleCheckItem('${task.id}','${task.projectId}',${idx})"
+            style="width:16px;height:16px;border-radius:3px;border:1.5px solid ${item.status===1?'var(--success)':'var(--border2)'};background:${item.status===1?'var(--success)':'transparent'};cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;">
+            ${item.status===1?'<span style="color:white;font-size:11px;">✓</span>':''}
+          </div>
+          <span style="font-size:13px;color:var(--text);flex:1;${item.status===1?'text-decoration:line-through;color:var(--text3);':''}">${escHtml(item.title)}</span>
+        </div>`).join('')}
+      </div>` : ''}
 
-      <!-- 完了ボタン -->
       ${task.status !== 2 ? `
       <div style="margin-top:16px;">
         <button class="btn-primary" style="width:100%;" onclick="completeTask('${task.id}','${task.projectId}')">タスクを完了にする</button>
       </div>` : '<div style="margin-top:16px;text-align:center;font-size:13px;color:var(--success);">✓ 完了済み</div>'}
     </div>`;
+  }
+}
+
+function addCheckItemInput() {
+  const container = document.getElementById('edit-checklist');
+  const idx = window._editItemCount++;
+  const div = document.createElement('div');
+  div.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:6px;';
+  div.id = `edit-ci-${idx}`;
+  div.innerHTML = `
+    <input type="text" id="edit-ci-text-${idx}" placeholder="新しい項目"
+      style="flex:1;border:0.5px solid var(--border2);border-radius:4px;padding:5px 8px;font-size:13px;font-family:inherit;outline:none;background:var(--surface2);color:var(--text);" />
+    <button onclick="removeCheckItem(${idx})" style="border:none;background:none;color:var(--danger);cursor:pointer;font-size:16px;padding:2px;flex-shrink:0;">×</button>`;
+  container.appendChild(div);
+  document.getElementById(`edit-ci-text-${idx}`).focus();
+}
+
+function removeCheckItem(idx) {
+  const el = document.getElementById(`edit-ci-${idx}`);
+  if (el) el.remove();
+}
+
+async function saveTaskEdit(taskId, projectId) {
+  const task = STATE.tasks.find(t => t.id === taskId);
+  if (!task) return;
+  const statusEl = document.getElementById('edit-save-status');
+  statusEl.textContent = '保存中...';
+  statusEl.style.color = 'var(--text3)';
+
+  // 値を収集
+  const title = document.getElementById('edit-title')?.value.trim() || task.title;
+  const dueVal = document.getElementById('edit-due')?.value;
+  const priority = parseInt(document.getElementById('edit-priority')?.value || '0');
+  const newProjectId = document.getElementById('edit-project')?.value || projectId;
+  const tagsRaw = document.getElementById('edit-tags')?.value || '';
+  const tags = tagsRaw.split(',').map(t => t.trim()).filter(Boolean);
+  const content = document.getElementById('edit-content')?.value || '';
+  // 見積もり時間を保存
+  const estVal = document.getElementById('edit-estimated')?.value;
+  if (estVal && parseInt(estVal) > 0) {
+    STATE.estimatedMinutes[taskId] = parseInt(estVal);
+    localStorage.setItem('estimated_minutes', JSON.stringify(STATE.estimatedMinutes));
+  }
+
+  // チェックリスト収集（表示中の項目のみ）
+  const ciContainer = document.getElementById('edit-checklist');
+  const newItems = [];
+  if (ciContainer) {
+    const inputs = ciContainer.querySelectorAll('input[type="text"]');
+    const origItems = task.items || [];
+    inputs.forEach((input, i) => {
+      const ciTitle = input.value.trim();
+      if (!ciTitle) return;
+      // 元の項目はstatusを引き継ぎ、新規はstatus=0
+      const origStatus = origItems[i]?.status ?? 0;
+      newItems.push({ title: ciTitle, status: origStatus });
+    });
+  }
+
+  const body = {
+    id: taskId,
+    title,
+    priority,
+    projectId: newProjectId,
+    tags,
+    content,
+    items: newItems,
+  };
+  if (dueVal) body.dueDate = dueVal + 'T00:00:00+0900';
+
+  try {
+    await ttPost(`/task/${taskId}`, body);
+    // プロジェクトが変わった場合はtaskのprojectIdも更新
+    const updated = { ...task, title, priority, projectId: newProjectId, tags, content, items: newItems,
+      dueDate: dueVal ? dueVal + 'T00:00:00+0900' : null };
+    STATE.tasks = STATE.tasks.map(t => t.id === taskId ? updated : t);
+    updateStats();
+    renderTaskView();
+    renderDetailPanel(updated, false);
+    statusEl.textContent = '保存しました ✓';
+    statusEl.style.color = 'var(--success)';
+  } catch(e) {
+    statusEl.textContent = '保存失敗: ' + e.message;
+    statusEl.style.color = 'var(--danger)';
+  }
 }
 
 async function toggleCheckItem(taskId, projectId, itemIdx) {
@@ -1210,7 +1494,7 @@ async function toggleCheckItem(taskId, projectId, itemIdx) {
   const items = [...(task.items || [])];
   items[itemIdx] = { ...items[itemIdx], status: items[itemIdx].status === 1 ? 0 : 1 };
   try {
-    await ttPost(`/project/${projectId}/task/${taskId}`, { ...task, items });
+    await ttPost(`/task/${taskId}`, { id: taskId, projectId, items });
     STATE.tasks = STATE.tasks.map(t => t.id === taskId ? { ...t, items } : t);
     updateStats();
     renderTaskView();
@@ -1218,6 +1502,142 @@ async function toggleCheckItem(taskId, projectId, itemIdx) {
   } catch(e) {
     alert('更新に失敗しました: ' + e.message);
   }
+}
+
+// ========== TIME MANAGEMENT ==========
+
+function getPrivateTags() {
+  try { return JSON.parse(STATE.schedule.privateTagsJson); } catch(e) { return []; }
+}
+
+function isPrivateTask(task) {
+  const privateTags = getPrivateTags();
+  return (task.tags || []).some(t => privateTags.includes(t));
+}
+
+function getEstimatedMinutes(task) {
+  // 1. 手動上書き
+  if (STATE.estimatedMinutes[task.id] !== undefined) return STATE.estimatedMinutes[task.id];
+  // 2. TickTickのestimatedDuration（秒単位）
+  if (task.estimatedDuration) return Math.round(task.estimatedDuration / 60);
+  // 3. Claude推定はnullを返す（後でまとめてリクエスト）
+  return null;
+}
+
+function formatMinutes(min) {
+  if (min === null || min === undefined) return '?';
+  if (min < 60) return `${min}分`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m > 0 ? `${h}h${m}m` : `${h}h`;
+}
+
+function getTodayAvailableHours() {
+  const avail = STATE.today.available !== null ? STATE.today.available : STATE.schedule.defaultAvailable;
+  const overtime = STATE.today.overtime || 0;
+  // ビジースロットから差し引き
+  let busyMin = 0;
+  (STATE.today.busySlots || []).forEach(slot => {
+    const [sh, sm] = slot.start.split(':').map(Number);
+    const [eh, em] = slot.end.split(':').map(Number);
+    busyMin += (eh * 60 + em) - (sh * 60 + sm);
+  });
+  return Math.max(0, avail + overtime - busyMin / 60);
+}
+
+function updateTodaySchedule() {
+  const start = document.getElementById('today-work-start')?.value;
+  const end = document.getElementById('today-work-end')?.value;
+  const avail = parseFloat(document.getElementById('today-available')?.value);
+  const overtime = parseFloat(document.getElementById('today-overtime')?.value || '0');
+  if (start) STATE.today.customWorkStart = start;
+  if (end) STATE.today.customWorkEnd = end;
+  if (!isNaN(avail)) STATE.today.available = avail;
+  STATE.today.overtime = isNaN(overtime) ? 0 : overtime;
+  STATE.today.date = todayJST();
+  updateTimeBar();
+}
+
+function resetTodaySchedule() {
+  STATE.today.available = null;
+  STATE.today.overtime = 0;
+  STATE.today.busySlots = [];
+  STATE.today.customWorkStart = null;
+  STATE.today.customWorkEnd = null;
+  initTodayUI();
+  updateTimeBar();
+}
+
+function initTodayUI() {
+  const startEl = document.getElementById('today-work-start');
+  const endEl = document.getElementById('today-work-end');
+  const availEl = document.getElementById('today-available');
+  const otEl = document.getElementById('today-overtime');
+  if (startEl) startEl.value = STATE.today.customWorkStart || STATE.schedule.workStart;
+  if (endEl) endEl.value = STATE.today.customWorkEnd || STATE.schedule.workEnd;
+  if (availEl) availEl.value = STATE.today.available !== null ? STATE.today.available : STATE.schedule.defaultAvailable;
+  if (otEl) otEl.value = STATE.today.overtime || 0;
+}
+
+function updateTimeBar() {
+  const today = todayJST();
+  const active = STATE.tasks.filter(t => t.status === 0);
+  const todayTasks = active.filter(t => dueDateStr(t.dueDate) === today);
+  const workTasks = todayTasks.filter(t => !isPrivateTask(t));
+  let totalMin = 0;
+  let hasUnknown = false;
+  workTasks.forEach(t => {
+    const m = getEstimatedMinutes(t);
+    if (m === null) hasUnknown = true;
+    else totalMin += m;
+  });
+  const availH = getTodayAvailableHours();
+  const availMin = availH * 60;
+  const pct = availMin > 0 ? Math.min(100, Math.round(totalMin / availMin * 100)) : 0;
+  const isOver = totalMin > availMin;
+  const fill = document.getElementById('time-bar-fill');
+  const label = document.getElementById('time-bar-label');
+  const remaining = document.getElementById('time-bar-remaining');
+  if (fill) {
+    fill.style.width = pct + '%';
+    fill.style.background = isOver ? 'var(--danger)' : pct > 80 ? 'var(--warn)' : 'var(--accent)';
+  }
+  if (label) label.textContent = `業務タスク合計: ${formatMinutes(totalMin)}${hasUnknown?' (+推定未設定あり)':''} / ${availH}h`;
+  if (remaining) {
+    const remMin = availMin - totalMin;
+    remaining.textContent = isOver
+      ? `⚠ ${formatMinutes(Math.abs(remMin))} オーバー`
+      : `残り ${formatMinutes(remMin)}`;
+    remaining.style.color = isOver ? 'var(--danger)' : 'var(--text3)';
+  }
+}
+
+async function estimateTaskTimes(tasks) {
+  if (!STATE.apiKey) return;
+  const needEstimate = tasks.filter(t => t.status === 0 && STATE.estimatedMinutes[t.id] === undefined && !t.estimatedDuration);
+  if (needEstimate.length === 0) { updateTimeBar(); return; }
+  const list = needEstimate.slice(0, 20).map(t => `- id:${t.id} title:${t.title}${t.content?' memo:'+t.content.slice(0,50):''}${(t.items||[]).length>0?' checklist:'+t.items.length+'項目':''}`).join('\n');
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': STATE.apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 512,
+        messages: [{ role: 'user', content: `以下のタスクの所要時間を推定してください。JSONのみで返してください（他のテキスト不要）。\n{"taskId":"分数（整数）",...}\n\n${list}` }]
+      })
+    });
+    const data = await resp.json();
+    const text = data.content?.[0]?.text || '{}';
+    const clean = text.replace(/```json|```/g, '').trim();
+    const result = JSON.parse(clean);
+    Object.entries(result).forEach(([id, min]) => {
+      if (!STATE.estimatedMinutes[id]) STATE.estimatedMinutes[id] = parseInt(min);
+    });
+    localStorage.setItem('estimated_minutes', JSON.stringify(STATE.estimatedMinutes));
+    updateTimeBar();
+    renderTaskView();
+  } catch(e) { updateTimeBar(); }
 }
 
 // ========== CLAUDE CHAT ==========
@@ -1304,12 +1724,12 @@ async function callClaude() {
 function buildSystemPrompt() {
   const todayStr = new Date().toLocaleDateString('ja-JP', {year:'numeric',month:'long',day:'numeric',weekday:'long'});
   const today = todayJST();
+  const dow = new Date().getDay();
+  const isWeekday = dow >= 1 && dow <= 5;
   const active = STATE.tasks.filter(t => t.status === 0);
   const todayTasks = active.filter(t => dueDateStr(t.dueDate) === today);
   const overdue = active.filter(t => { const ds = dueDateStr(t.dueDate); return ds && ds < today; });
   const high = active.filter(t => t.priority === 5);
-
-  // チェックリスト進捗が途中のタスク
   const inProgress = active.filter(t => {
     const items = t.items || [];
     if (items.length === 0) return false;
@@ -1317,10 +1737,31 @@ function buildSystemPrompt() {
     return done > 0 && done < items.length;
   });
 
+  // 時間情報
+  const workStart = STATE.today.customWorkStart || STATE.schedule.workStart;
+  const workEnd = STATE.today.customWorkEnd || STATE.schedule.workEnd;
+  const availH = getTodayAvailableHours();
+  const overtime = STATE.today.overtime || 0;
+  const busySlots = STATE.today.busySlots || [];
+  const busyStr = busySlots.length > 0 ? busySlots.map(s => `${s.start}〜${s.end}（${s.label||'予定'}）`).join('、') : 'なし';
+
+  // 業務タスクとプライベートタスクを分類
+  const workTasks = todayTasks.filter(t => !isPrivateTask(t));
+  const privateTasks = todayTasks.filter(t => isPrivateTask(t));
+  let totalWorkMin = 0;
+  workTasks.forEach(t => { const m = getEstimatedMinutes(t); if (m) totalWorkMin += m; });
+  const availMin = availH * 60;
+  const overMin = totalWorkMin - availMin;
+
   const taskSummary = `
 【今日の日付】${todayStr}
+【勤務時間】${workStart}〜${workEnd}（${isWeekday?'平日':'休日'}）
+【作業可能時間】${availH}時間（デフォルト${STATE.schedule.defaultAvailable}h${overtime>0?'＋残業'+overtime+'h':''}）
+【本日の予定・拘束】${busyStr}
+【業務タスク合計見積もり】${formatMinutes(totalWorkMin)}（${overMin>0?'⚠ '+formatMinutes(overMin)+'オーバー':'余裕あり'}）
+【業務タスク】${workTasks.map(t=>`${t.title}(${formatMinutes(getEstimatedMinutes(t))})`).join('、')||'なし'}
+【プライベートタスク（勤務時間外）】${privateTasks.map(t=>t.title).join('、')||'なし'}
 【期限切れ】${overdue.length}件: ${overdue.slice(0,5).map(t=>t.title).join('、')}${overdue.length>5?'...他':''}
-【今日期限】${todayTasks.length}件: ${todayTasks.map(t=>t.title).join('、')}
 【優先度高】${high.length}件: ${high.slice(0,5).map(t=>t.title).join('、')}
 【進行中チェックリスト】${inProgress.length}件: ${inProgress.map(t => {
     const items = t.items || [];
@@ -1339,18 +1780,24 @@ ${taskSummary}
 【あなたの役割】
 - タスクの整理・優先順位付けのアドバイス
 - 今日・今週やるべきことの提案（最大5件に絞る）
+- 作業可能時間を考慮して実現可能なタスク量を提案する
+- 時間オーバーの場合は翌日への振り分けを提案する
+- 残業を検討する場合は具体的な時間を提案する
 - 期限切れタスクへの対処提案
+- 業務タスクは勤務時間内、プライベートタスクは勤務時間外に割り当てる
 - タスク追加の指示を受けたら【ADD_TASK:タイトル|プロジェクト名】の形式で出力
+- ユーザーが時間・予定・残業を伝えたら【SET_AVAILABLE:時間数】【ADD_BUSY:開始-終了-ラベル】【SET_OVERTIME:時間数】で反映する
 - メンタルコーチング（タスクが多すぎて辛いときは一緒に整理する）
 
 【応答スタイル】
 - 日本語で、親しみやすく、でも的確に
 - 長文は避け、箇条書きを活用
-- 完璧主義にならず「まず1つ」を促す
-- タスクを追加する場合は必ず【ADD_TASK:タイトル|プロジェクト名】を含める`;
+- 完璧主義にならず「まず1つ」を促す`;
 }
 
 async function detectAndExecuteActions(text) {
+  let changed = false;
+  // タスク追加
   const addMatches = text.matchAll(/【ADD_TASK:([^|]+)\|([^\]]+)】/g);
   for (const m of addMatches) {
     const title = m[1].trim();
@@ -1360,6 +1807,32 @@ async function detectAndExecuteActions(text) {
       await ttPost('/task', { title, projectId: proj.id });
       await loadTasks();
     }
+  }
+  // 作業可能時間の設定
+  const availMatch = text.match(/【SET_AVAILABLE:([\d.]+)】/);
+  if (availMatch) {
+    STATE.today.available = parseFloat(availMatch[1]);
+    STATE.today.date = todayJST();
+    changed = true;
+  }
+  // 残業時間の設定
+  const otMatch = text.match(/【SET_OVERTIME:([\d.]+)】/);
+  if (otMatch) {
+    STATE.today.overtime = parseFloat(otMatch[1]);
+    STATE.today.date = todayJST();
+    changed = true;
+  }
+  // ビジースロットの追加（例：【ADD_BUSY:10:00-12:00-職員会議】）
+  const busyMatches = text.matchAll(/【ADD_BUSY:(\d{1,2}:\d{2})-(\d{1,2}:\d{2})-?([^\]]*?)】/g);
+  for (const m of busyMatches) {
+    STATE.today.busySlots = STATE.today.busySlots || [];
+    STATE.today.busySlots.push({ start: m[1], end: m[2], label: m[3] || '予定' });
+    STATE.today.date = todayJST();
+    changed = true;
+  }
+  if (changed) {
+    initTodayUI();
+    updateTimeBar();
   }
 }
 
@@ -1662,7 +2135,7 @@ async function registerExtractedTasks() {
 }
 
 // ========== SETTINGS ==========
-const SETTINGS_KEYS = ['tt_token','claude_apikey','user_name','user_role','hidden_projects','fav_projects'];
+const SETTINGS_KEYS = ['tt_token','claude_apikey','user_name','user_role','hidden_projects','fav_projects','work_start','work_end','default_available','private_tags','estimated_minutes'];
 
 function exportSettings() {
   const data = {};
@@ -1739,6 +2212,24 @@ async function testTickTick() {
     document.getElementById('settings-status').textContent = 'エラー: ' + e.message;
     document.getElementById('settings-status').style.color = 'var(--danger)';
   }
+}
+
+function saveScheduleSettings() {
+  STATE.schedule.workStart = document.getElementById('settings-work-start').value || '08:15';
+  STATE.schedule.workEnd = document.getElementById('settings-work-end').value || '16:45';
+  STATE.schedule.defaultAvailable = parseFloat(document.getElementById('settings-default-available').value) || 5.5;
+  const tagsRaw = document.getElementById('settings-private-tags').value;
+  const tags = tagsRaw.split(',').map(t => t.trim()).filter(Boolean);
+  STATE.schedule.privateTagsJson = JSON.stringify(tags);
+  localStorage.setItem('work_start', STATE.schedule.workStart);
+  localStorage.setItem('work_end', STATE.schedule.workEnd);
+  localStorage.setItem('default_available', STATE.schedule.defaultAvailable);
+  localStorage.setItem('private_tags', STATE.schedule.privateTagsJson);
+  initTodayUI();
+  updateTimeBar();
+  document.getElementById('schedule-settings-status').textContent = '保存しました。';
+  document.getElementById('schedule-settings-status').style.color = 'var(--success)';
+  setTimeout(() => { document.getElementById('schedule-settings-status').textContent = ''; }, 2000);
 }
 </script>
 </body>
