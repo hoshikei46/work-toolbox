@@ -387,11 +387,53 @@ button { cursor: pointer; font-family: inherit; font-size: 13px; border-radius: 
             </div>
             <div style="display:flex;align-items:center;margin-bottom:12px;">
               <div id="task-view-title" style="font-size:14px;font-weight:500;color:var(--text);flex:1;">今日のタスク</div>
-              <div id="kanban-toggle" style="display:none;gap:4px;">
-                <button id="btn-list-view" class="btn btn-primary" style="font-size:12px;padding:4px 10px;" onclick="setViewMode('list')">☰ リスト</button>
-                <button id="btn-kanban-view" class="btn" style="font-size:12px;padding:4px 10px;" onclick="setViewMode('kanban')">⊞ カンバン</button>
+              <div style="display:flex;gap:4px;align-items:center;">
+                <button id="bulk-mode-btn" class="btn" style="font-size:12px;padding:4px 10px;" onclick="toggleBulkMode()">一括操作</button>
+                <div id="kanban-toggle" style="display:none;gap:4px;">
+                  <button id="btn-list-view" class="btn btn-primary" style="font-size:12px;padding:4px 10px;" onclick="setViewMode('list')">☰ リスト</button>
+                  <button id="btn-kanban-view" class="btn" style="font-size:12px;padding:4px 10px;" onclick="setViewMode('kanban')">⊞ カンバン</button>
+                </div>
               </div>
             </div>
+
+            <!-- 一括操作パネル -->
+            <div id="bulk-panel" style="display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:10px;border:0.5px solid var(--border2);">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <span id="bulk-count" style="font-size:12px;color:var(--text2);flex-shrink:0;">0件選択</span>
+                <div style="height:14px;width:0.5px;background:var(--border2);flex-shrink:0;"></div>
+                <!-- 先送り -->
+                <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
+                  <span style="font-size:11px;color:var(--text3);">先送り:</span>
+                  <button class="btn" style="font-size:11px;padding:3px 7px;" onclick="bulkPostpone('tomorrow')">明日</button>
+                  <button class="btn" style="font-size:11px;padding:3px 7px;" onclick="bulkPostpone('dayafter')">明後日</button>
+                  <button class="btn" style="font-size:11px;padding:3px 7px;" onclick="bulkPostpone('nextweek')">来週</button>
+                  <input type="date" id="bulk-date" style="font-size:11px;padding:3px 6px;border:0.5px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);outline:none;" />
+                  <button class="btn" style="font-size:11px;padding:3px 7px;" onclick="bulkPostpone('custom')">指定日</button>
+                </div>
+                <div style="height:14px;width:0.5px;background:var(--border2);flex-shrink:0;"></div>
+                <!-- 優先度 -->
+                <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
+                  <span style="font-size:11px;color:var(--text3);">優先度:</span>
+                  <button class="btn" style="font-size:11px;padding:3px 7px;color:var(--danger);" onclick="bulkPriority(5)">高</button>
+                  <button class="btn" style="font-size:11px;padding:3px 7px;color:var(--warn);" onclick="bulkPriority(3)">中</button>
+                  <button class="btn" style="font-size:11px;padding:3px 7px;" onclick="bulkPriority(0)">低</button>
+                </div>
+                <div style="height:14px;width:0.5px;background:var(--border2);flex-shrink:0;"></div>
+                <!-- プロジェクト -->
+                <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
+                  <span style="font-size:11px;color:var(--text3);">移動:</span>
+                  <select id="bulk-project" style="font-size:11px;padding:3px 6px;border:0.5px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);outline:none;max-width:130px;"></select>
+                  <button class="btn" style="font-size:11px;padding:3px 7px;" onclick="bulkMoveProject()">移動</button>
+                </div>
+                <div style="height:14px;width:0.5px;background:var(--border2);flex-shrink:0;"></div>
+                <!-- 完了・削除 -->
+                <button class="btn" style="font-size:11px;padding:3px 7px;color:var(--success);" onclick="bulkComplete()">✓ 完了</button>
+                <button class="btn" style="font-size:11px;padding:3px 7px;color:var(--danger);" onclick="bulkDelete()">削除</button>
+                <button class="btn" style="font-size:11px;padding:3px 7px;margin-left:auto;" onclick="bulkSelectAll()">全選択</button>
+                <button class="btn" style="font-size:11px;padding:3px 7px;" onclick="toggleBulkMode()">完了</button>
+              </div>
+            </div>
+
             <div id="task-list"><div class="loading"><div class="spinner"></div>読み込み中...</div></div>
           </div>
         </div>
@@ -637,6 +679,8 @@ const STATE = {
   currentView: 'today',
   currentProject: null,
   viewMode: 'list', // 'list' or 'kanban'
+  bulkMode: false,
+  selectedTasks: new Set(),
   chatHistory: [],
   // 時間管理
   schedule: {
@@ -1235,7 +1279,9 @@ function renderTaskView() {
   let title = '今日のタスク';
 
   if (STATE.currentView === 'today') {
-    tasks = tasks.filter(t => dueDateStr(t.dueDate) === today);
+    const todayTasks = tasks.filter(t => dueDateStr(t.dueDate) === today);
+    const overdueTasks = tasks.filter(t => { const ds = dueDateStr(t.dueDate); return ds && ds < today; });
+    tasks = [...overdueTasks, ...todayTasks];
     title = '今日のタスク';
   } else if (STATE.currentView === 'tomorrow') {
     const tomorrowJST = new Date(new Date().getTime() + 9*60*60*1000);
@@ -1337,10 +1383,18 @@ function renderTaskView() {
     const hasItems = itemTotal > 0;
     const hasContent = t.content && t.content.trim();
     const progressPct = itemTotal > 0 ? Math.round(itemDone / itemTotal * 100) : 0;
+    const isSelected = STATE.selectedTasks.has(t.id);
     return `
-      <div class="task-item" id="task-${t.id}" onclick="openTaskDetail('${t.id}')" style="cursor:pointer;">
+      <div class="task-item" id="task-${t.id}"
+        onclick="${STATE.bulkMode ? `toggleBulkSelect('${t.id}')` : `openTaskDetail('${t.id}')`}"
+        style="cursor:pointer;${isSelected ? 'background:var(--accent-bg);' : ''}">
+        ${STATE.bulkMode ? `
+        <div onclick="event.stopPropagation();toggleBulkSelect('${t.id}')"
+          style="width:18px;height:18px;border-radius:3px;border:1.5px solid ${isSelected?'var(--accent)':'var(--border2)'};background:${isSelected?'var(--accent)':'transparent'};flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:pointer;margin-top:2px;">
+          ${isSelected?'<span style="color:white;font-size:11px;">✓</span>':''}
+        </div>` : `
         <div class="priority-bar ${pClass}"></div>
-        <div class="task-check ${t.status===2?'done':''}" onclick="event.stopPropagation();completeTask('${t.id}','${t.projectId}')"></div>
+        <div class="task-check ${t.status===2?'done':''}" onclick="event.stopPropagation();completeTask('${t.id}','${t.projectId}')"></div>`}
         <div class="task-body">
           <div class="task-title ${t.status===2?'done':''}">${escHtml(t.title)}</div>
           ${hasItems ? `
@@ -1364,6 +1418,157 @@ function renderTaskView() {
       </div>
     `;
   }).join('');
+}
+
+// ========== BULK OPERATIONS ==========
+function toggleBulkMode() {
+  STATE.bulkMode = !STATE.bulkMode;
+  STATE.selectedTasks = new Set();
+  const btn = document.getElementById('bulk-mode-btn');
+  const panel = document.getElementById('bulk-panel');
+  if (STATE.bulkMode) {
+    btn.textContent = '選択解除';
+    btn.classList.add('btn-primary');
+    btn.classList.remove('btn');
+    panel.style.display = 'block';
+    // プロジェクト一覧を更新
+    const sel = document.getElementById('bulk-project');
+    sel.innerHTML = STATE.projects.map(p => `<option value="${escHtml(p.id)}">${escHtml(p.name)}</option>`).join('');
+  } else {
+    btn.textContent = '一括操作';
+    btn.classList.remove('btn-primary');
+    btn.classList.add('btn');
+    panel.style.display = 'none';
+  }
+  renderTaskView();
+}
+
+function toggleBulkSelect(taskId) {
+  if (STATE.selectedTasks.has(taskId)) {
+    STATE.selectedTasks.delete(taskId);
+  } else {
+    STATE.selectedTasks.add(taskId);
+  }
+  document.getElementById('bulk-count').textContent = `${STATE.selectedTasks.size}件選択`;
+  renderTaskView();
+}
+
+function bulkSelectAll() {
+  const active = STATE.tasks.filter(t => t.status === 0);
+  if (STATE.selectedTasks.size === active.length) {
+    STATE.selectedTasks = new Set();
+  } else {
+    STATE.selectedTasks = new Set(active.map(t => t.id));
+  }
+  document.getElementById('bulk-count').textContent = `${STATE.selectedTasks.size}件選択`;
+  renderTaskView();
+}
+
+function getBulkTargetDate(type) {
+  const addDays = (n) => {
+    const d = new Date(todayJST() + 'T00:00:00+09:00');
+    d.setDate(d.getDate() + n);
+    const jst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+    return jst.toISOString().slice(0,10);
+  };
+  if (type === 'tomorrow') return addDays(1);
+  if (type === 'dayafter') return addDays(2);
+  if (type === 'nextweek') return addDays(7);
+  if (type === 'custom') {
+    const val = document.getElementById('bulk-date').value;
+    if (!val) { alert('日付を選択してください。'); return null; }
+    return val;
+  }
+  return null;
+}
+
+async function bulkPostpone(type) {
+  if (STATE.selectedTasks.size === 0) { alert('タスクを選択してください。'); return; }
+  const dateStr = getBulkTargetDate(type);
+  if (!dateStr) return;
+  const tasks = STATE.tasks.filter(t => STATE.selectedTasks.has(t.id));
+  let count = 0;
+  for (const task of tasks) {
+    try {
+      await ttPost(`/task/${task.id}`, { id: task.id, title: task.title, projectId: task.projectId, dueDate: dateStr + 'T00:00:00+0900' });
+      STATE.tasks = STATE.tasks.map(t => t.id === task.id ? { ...t, dueDate: dateStr + 'T00:00:00+0900' } : t);
+      count++;
+    } catch(e) {}
+  }
+  STATE.selectedTasks = new Set();
+  showToast(`${count}件を先送りしました。`, null, 3000);
+  updateStats(); renderTaskView();
+}
+
+async function bulkPriority(priority) {
+  if (STATE.selectedTasks.size === 0) { alert('タスクを選択してください。'); return; }
+  const tasks = STATE.tasks.filter(t => STATE.selectedTasks.has(t.id));
+  let count = 0;
+  for (const task of tasks) {
+    try {
+      await ttPost(`/task/${task.id}`, { id: task.id, title: task.title, projectId: task.projectId, priority });
+      STATE.tasks = STATE.tasks.map(t => t.id === task.id ? { ...t, priority } : t);
+      count++;
+    } catch(e) {}
+  }
+  STATE.selectedTasks = new Set();
+  showToast(`${count}件の優先度を変更しました。`, null, 3000);
+  updateStats(); renderTaskView();
+}
+
+async function bulkMoveProject() {
+  if (STATE.selectedTasks.size === 0) { alert('タスクを選択してください。'); return; }
+  const newProjectId = document.getElementById('bulk-project').value;
+  const proj = STATE.projects.find(p => p.id === newProjectId);
+  if (!proj) return;
+  const tasks = STATE.tasks.filter(t => STATE.selectedTasks.has(t.id));
+  let count = 0;
+  for (const task of tasks) {
+    try {
+      await ttPost(`/task/${task.id}`, { id: task.id, title: task.title, projectId: newProjectId });
+      STATE.tasks = STATE.tasks.map(t => t.id === task.id ? { ...t, projectId: newProjectId } : t);
+      count++;
+    } catch(e) {}
+  }
+  STATE.selectedTasks = new Set();
+  showToast(`${count}件を「${proj.name}」に移動しました。`, null, 3000);
+  updateStats(); renderTaskView();
+}
+
+async function bulkComplete() {
+  if (STATE.selectedTasks.size === 0) { alert('タスクを選択してください。'); return; }
+  if (!confirm(`${STATE.selectedTasks.size}件を完了にしますか？`)) return;
+  const tasks = STATE.tasks.filter(t => STATE.selectedTasks.has(t.id));
+  let count = 0;
+  for (const task of tasks) {
+    try {
+      await ttPost(`/project/${task.projectId}/task/${task.id}/complete`, {});
+      STATE.tasks = STATE.tasks.map(t => t.id === task.id ? { ...t, status: 2 } : t);
+      count++;
+    } catch(e) {}
+  }
+  STATE.selectedTasks = new Set();
+  showToast(`${count}件を完了にしました。`, null, 3000);
+  updateStats(); renderTaskView();
+}
+
+async function bulkDelete() {
+  if (STATE.selectedTasks.size === 0) { alert('タスクを選択してください。'); return; }
+  if (!confirm(`${STATE.selectedTasks.size}件を削除しますか？\nこの操作は取り消せません。`)) return;
+  const tasks = STATE.tasks.filter(t => STATE.selectedTasks.has(t.id));
+  let count = 0;
+  for (const task of tasks) {
+    try {
+      await fetch(`${API}/project/${task.projectId}/task/${task.id}`, {
+        method: 'DELETE', headers: { 'Authorization': `Bearer ${STATE.token}` }
+      });
+      STATE.tasks = STATE.tasks.filter(t => t.id !== task.id);
+      count++;
+    } catch(e) {}
+  }
+  STATE.selectedTasks = new Set();
+  showToast(`${count}件を削除しました。`, null, 3000);
+  updateStats(); renderTaskView();
 }
 
 // ========== KANBAN ==========
