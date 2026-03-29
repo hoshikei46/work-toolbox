@@ -425,21 +425,40 @@ button { cursor: pointer; font-family: inherit; font-size: 13px; border-radius: 
           </div>
         </div>
 
-        <!-- プロジェクト管理（TickTick連携） -->
+        <!-- プロジェクト表示設定 -->
         <div class="card">
-          <div class="card-title">プロジェクト管理（TickTick連携）</div>
-          <p style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:14px;">プロジェクト名・色の変更や新規作成がここからできます。変更はTickTickに即時反映されます。</p>
-
-          <!-- 新規作成 -->
-          <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center;">
-            <input type="text" id="new-proj-name" placeholder="新しいプロジェクト名" style="flex:1;border:0.5px solid var(--border2);border-radius:var(--radius-sm);padding:7px 10px;font-size:13px;font-family:inherit;outline:none;background:var(--surface2);color:var(--text);" />
-            <input type="color" id="new-proj-color" value="#4772FA" style="width:36px;height:34px;border:0.5px solid var(--border2);border-radius:var(--radius-sm);cursor:pointer;padding:2px;" title="色を選択" />
-            <button class="btn-primary" onclick="createProject()">作成</button>
+          <div class="card-title">プロジェクトの並び替え・グループ化</div>
+          <p style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:14px;">ドラッグで並び替え、グループ名を設定して折りたたみ表示にできます。★でお気に入り先頭固定。</p>
+          <div id="proj-sort-list" style="max-height:400px;overflow-y:auto;"></div>
+          <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn-primary" onclick="saveProjOrder()">並び順・グループを保存</button>
+            <button class="btn" onclick="resetProjOrder()">リセット</button>
           </div>
+          <div id="proj-sort-status" style="margin-top:8px;font-size:13px;color:var(--text3);"></div>
+        </div>
 
-          <!-- プロジェクト一覧 -->
-          <div id="project-manage-list" style="max-height:380px;overflow-y:auto;"></div>
-          <div id="proj-manage-status" style="margin-top:10px;font-size:13px;color:var(--text3);"></div>
+        <!-- タグ管理 -->
+        <div class="card">
+          <div class="card-title">タグのグループ化・お気に入り設定</div>
+          <p style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:14px;">タグにグループ名をつけてサイドバーで折りたたみ表示にできます。★でお気に入り先頭固定。</p>
+          <div id="tag-settings-list" style="max-height:400px;overflow-y:auto;"></div>
+          <div style="margin-top:12px;">
+            <button class="btn-primary" onclick="saveTagSettings()">タグ設定を保存</button>
+          </div>
+          <div id="tag-settings-status" style="margin-top:8px;font-size:13px;color:var(--text3);"></div>
+        </div>
+
+        <!-- プロジェクト表示設定（非表示） -->
+        <div class="card">
+          <div class="card-title">サイドバーのプロジェクト表示設定</div>
+          <p style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:14px;">チェックを外したプロジェクトはサイドバーから非表示になります（タスクデータは消えません）。</p>
+          <div id="project-visibility-list" style="max-height:320px;overflow-y:auto;"></div>
+          <div style="margin-top:14px;display:flex;gap:8px;">
+            <button class="btn-primary" onclick="saveProjectVisibility()">保存</button>
+            <button class="btn" onclick="selectAllProjects(true)">すべて表示</button>
+            <button class="btn" onclick="selectAllProjects(false)">すべて非表示</button>
+          </div>
+          <div id="proj-visibility-status" style="margin-top:8px;font-size:13px;color:var(--text3);"></div>
         </div>
 
       </div>
@@ -514,10 +533,12 @@ async function ttPatch(path, body) {
 async function loadProjects() {
   try {
     const projects = await ttGet('/project');
-    STATE.projects = projects;
-    renderProjects(projects);
+    // アーカイブ済み・クローズ済みを除外
+    const active = projects.filter(p => !p.closed && p.permission !== 'none');
+    STATE.projects = active;
+    renderProjects(active);
     document.getElementById('conn-dot').style.background = '#22c55e';
-    document.getElementById('conn-status').textContent = '接続済み';
+    document.getElementById('conn-status').textContent = `接続済み（${active.length}件）`;
   } catch(e) {
     document.getElementById('conn-dot').style.background = '#ef4444';
     document.getElementById('conn-status').textContent = '接続エラー';
@@ -561,41 +582,114 @@ async function loadTasks() {
 function getHiddenProjects() {
   try { return JSON.parse(localStorage.getItem('hidden_projects') || '[]'); } catch(e) { return []; }
 }
+function getFavoriteProjects() {
+  try { return JSON.parse(localStorage.getItem('fav_projects') || '[]'); } catch(e) { return []; }
+}
+function getProjOrder() {
+  try { return JSON.parse(localStorage.getItem('proj_order') || '[]'); } catch(e) { return []; }
+}
+function getProjGroups() {
+  try { return JSON.parse(localStorage.getItem('proj_groups') || '{}'); } catch(e) { return {}; }
+}
+function getCollapsedGroups() {
+  try { return JSON.parse(localStorage.getItem('collapsed_groups') || '[]'); } catch(e) { return []; }
+}
+function getFavTags() {
+  try { return JSON.parse(localStorage.getItem('fav_tags') || '[]'); } catch(e) { return []; }
+}
+function getTagGroups() {
+  try { return JSON.parse(localStorage.getItem('tag_groups') || '{}'); } catch(e) { return {}; }
+}
+
+function toggleGroupCollapse(groupName) {
+  let collapsed = getCollapsedGroups();
+  if (collapsed.includes(groupName)) {
+    collapsed = collapsed.filter(g => g !== groupName);
+  } else {
+    collapsed.push(groupName);
+  }
+  localStorage.setItem('collapsed_groups', JSON.stringify(collapsed));
+  renderProjects(STATE.projects);
+  renderTagList(STATE._lastTagEntries || []);
+}
 
 function renderProjects(projects) {
   const hidden = getHiddenProjects();
   const favorites = getFavoriteProjects();
+  const order = getProjOrder();
+  const groups = getProjGroups();
+  const collapsed = getCollapsedGroups();
   const el = document.getElementById('project-list');
+
   const visible = projects.filter(p => !hidden.includes(p.id));
+
+  // 並び順適用（orderに従い、未登録は末尾）
+  const ordered = [...visible].sort((a, b) => {
+    const ai = order.indexOf(a.id);
+    const bi = order.indexOf(b.id);
+    if (ai === -1 && bi === -1) return 0;
+    if (ai === -1) return 1;
+    if (bi === -1) return -1;
+    return ai - bi;
+  });
+
   // お気に入りを先頭に
-  const favProjects = visible.filter(p => favorites.includes(p.id));
-  const restProjects = visible.filter(p => !favorites.includes(p.id));
-  const sorted = [...favProjects, ...restProjects];
+  const favs = ordered.filter(p => favorites.includes(p.id));
+  const rest = ordered.filter(p => !favorites.includes(p.id));
+  const sorted = [...favs, ...rest];
 
-  el.innerHTML = sorted.map(p => {
-    const isFav = favorites.includes(p.id);
-    return `
-    <div class="nav-item" onclick="switchView('project-${p.id}', this)" data-pid="${p.id}" style="padding-right:4px;">
-      <span style="width:8px;height:8px;border-radius:50%;background:${p.color||'#888'};flex-shrink:0;"></span>
-      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${escHtml(p.name)}</span>
-      <span onclick="event.stopPropagation();toggleFavorite('${p.id}')" title="${isFav?'お気に入り解除':'お気に入り'}" style="font-size:12px;color:${isFav?'#f59e0b':'var(--border2)'};cursor:pointer;padding:2px 4px;flex-shrink:0;">★</span>
-    </div>`;
-  }).join('');
+  // グループ分け
+  const groupMap = {}; // groupName -> projects[]
+  const noGroup = [];
+  sorted.forEach(p => {
+    const g = groups[p.id];
+    if (g) {
+      if (!groupMap[g]) groupMap[g] = [];
+      groupMap[g].push(p);
+    } else {
+      noGroup.push(p);
+    }
+  });
 
+  let html = '';
+
+  // グループなしを先頭に
+  noGroup.forEach(p => { html += renderProjectItem(p, favorites); });
+
+  // グループごと
+  Object.entries(groupMap).forEach(([gName, gProjects]) => {
+    const isCollapsed = collapsed.includes('proj-' + gName);
+    html += `
+      <div style="margin-top:6px;">
+        <div onclick="toggleGroupCollapse('proj-${escHtml(gName)}')" style="display:flex;align-items:center;gap:6px;padding:4px 8px;cursor:pointer;border-radius:var(--radius-sm);" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
+          <span style="font-size:10px;color:var(--text3);transition:transform 0.15s;display:inline-block;transform:rotate(${isCollapsed?'0deg':'90deg'})">▶</span>
+          <span style="font-size:11px;font-weight:500;color:var(--text2);flex:1;">${escHtml(gName)}</span>
+          <span style="font-size:11px;color:var(--text3);">${gProjects.length}</span>
+        </div>
+        <div style="display:${isCollapsed?'none':'block'};padding-left:8px;">
+          ${gProjects.map(p => renderProjectItem(p, favorites)).join('')}
+        </div>
+      </div>`;
+  });
+
+  el.innerHTML = html;
   renderProjectVisibilityList(projects);
+  renderProjSortList(projects);
 }
 
-function getFavoriteProjects() {
-  try { return JSON.parse(localStorage.getItem('fav_projects') || '[]'); } catch(e) { return []; }
+function renderProjectItem(p, favorites) {
+  const isFav = favorites.includes(p.id);
+  return `
+  <div class="nav-item" onclick="switchView('project-${p.id}', this)" data-pid="${p.id}" style="padding-right:4px;">
+    <span style="width:8px;height:8px;border-radius:50%;background:${p.color||'#888'};flex-shrink:0;"></span>
+    <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${escHtml(p.name)}</span>
+    <span onclick="event.stopPropagation();toggleFavorite('${p.id}')" title="${isFav?'お気に入り解除':'お気に入り'}" style="font-size:12px;color:${isFav?'#f59e0b':'var(--border2)'};cursor:pointer;padding:2px 4px;flex-shrink:0;">★</span>
+  </div>`;
 }
 
 function toggleFavorite(projectId) {
   let favs = getFavoriteProjects();
-  if (favs.includes(projectId)) {
-    favs = favs.filter(id => id !== projectId);
-  } else {
-    favs.unshift(projectId);
-  }
+  favs = favs.includes(projectId) ? favs.filter(id => id !== projectId) : [projectId, ...favs];
   localStorage.setItem('fav_projects', JSON.stringify(favs));
   renderProjects(STATE.projects);
 }
@@ -609,8 +703,7 @@ function renderProjectVisibilityList(projects) {
       <input type="checkbox" id="pvis-${p.id}" ${hidden.includes(p.id)?'':'checked'} style="accent-color:var(--accent);width:15px;height:15px;" />
       <span style="width:10px;height:10px;border-radius:50%;background:${p.color||'#888'};flex-shrink:0;"></span>
       <label for="pvis-${p.id}" style="font-size:13px;color:var(--text);cursor:pointer;flex:1;">${escHtml(p.name)}</label>
-    </div>
-  `).join('');
+    </div>`).join('');
 }
 
 function saveProjectVisibility() {
@@ -631,6 +724,224 @@ function selectAllProjects(val) {
   });
 }
 
+// ===== プロジェクト並び替え・グループ設定UI =====
+function renderProjSortList(projects) {
+  const el = document.getElementById('proj-sort-list');
+  if (!el) return;
+  const order = getProjOrder();
+  const groups = getProjGroups();
+  const favorites = getFavoriteProjects();
+
+  const sorted = [...projects].sort((a, b) => {
+    const ai = order.indexOf(a.id); const bi = order.indexOf(b.id);
+    if (ai === -1 && bi === -1) return 0;
+    if (ai === -1) return 1; if (bi === -1) return -1;
+    return ai - bi;
+  });
+
+  el.innerHTML = sorted.map((p, i) => `
+    <div class="proj-sort-item" data-pid="${p.id}" draggable="true"
+      ondragstart="dragStart(event)" ondragover="dragOver(event)" ondrop="dropItem(event,'proj')" ondragend="dragEnd(event)"
+      style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius-sm);margin-bottom:6px;background:var(--surface);cursor:grab;">
+      <span style="color:var(--text3);cursor:grab;font-size:14px;">⠿</span>
+      <span style="width:10px;height:10px;border-radius:50%;background:${p.color||'#888'};flex-shrink:0;"></span>
+      <span style="flex:1;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(p.name)}</span>
+      <input type="text" placeholder="グループ名（任意）" value="${escHtml(groups[p.id]||'')}"
+        id="pgroup-${p.id}" style="width:120px;font-size:12px;padding:3px 7px;border:0.5px solid var(--border2);border-radius:4px;background:var(--surface2);color:var(--text);font-family:inherit;outline:none;" />
+      <span onclick="toggleFavoriteSetting('${p.id}',this)" style="font-size:13px;color:${favorites.includes(p.id)?'#f59e0b':'var(--border2)'};cursor:pointer;" title="お気に入り">★</span>
+    </div>`).join('');
+
+  // ドラッグ&ドロップ初期化
+  initDragDrop('proj');
+}
+
+function toggleFavoriteSetting(projectId, el) {
+  let favs = getFavoriteProjects();
+  if (favs.includes(projectId)) {
+    favs = favs.filter(id => id !== projectId);
+    el.style.color = 'var(--border2)';
+  } else {
+    favs.unshift(projectId);
+    el.style.color = '#f59e0b';
+  }
+  localStorage.setItem('fav_projects', JSON.stringify(favs));
+}
+
+function saveProjOrder() {
+  const items = document.querySelectorAll('.proj-sort-item');
+  const order = Array.from(items).map(el => el.dataset.pid);
+  const groups = {};
+  items.forEach(el => {
+    const pid = el.dataset.pid;
+    const g = document.getElementById(`pgroup-${pid}`)?.value.trim();
+    if (g) groups[pid] = g;
+  });
+  localStorage.setItem('proj_order', JSON.stringify(order));
+  localStorage.setItem('proj_groups', JSON.stringify(groups));
+  renderProjects(STATE.projects);
+  document.getElementById('proj-sort-status').textContent = '保存しました。';
+  document.getElementById('proj-sort-status').style.color = 'var(--success)';
+  setTimeout(() => { document.getElementById('proj-sort-status').textContent = ''; }, 2000);
+}
+
+function resetProjOrder() {
+  localStorage.removeItem('proj_order');
+  localStorage.removeItem('proj_groups');
+  renderProjects(STATE.projects);
+  renderProjSortList(STATE.projects);
+  document.getElementById('proj-sort-status').textContent = 'リセットしました。';
+  setTimeout(() => { document.getElementById('proj-sort-status').textContent = ''; }, 2000);
+}
+
+// ===== タグ管理 =====
+function collectAndRenderTags(activeTasks) {
+  const tagMap = {};
+  activeTasks.forEach(t => {
+    (t.tags || []).forEach(tag => { tagMap[tag] = (tagMap[tag] || 0) + 1; });
+  });
+  const sorted = Object.entries(tagMap).sort((a, b) => b[1] - a[1]);
+  STATE.allTags = sorted.map(([name]) => name);
+  STATE._lastTagEntries = sorted;
+  renderTagList(sorted);
+  renderTagSettingsList(sorted);
+}
+
+function renderTagList(tagEntries) {
+  const el = document.getElementById('tag-list');
+  if (!el) return;
+  if (tagEntries.length === 0) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:4px 8px;">タグなし</div>';
+    return;
+  }
+  const favTags = getFavTags();
+  const tagGroups = getTagGroups();
+  const collapsed = getCollapsedGroups();
+
+  // お気に入りを先頭に
+  const favEntries = tagEntries.filter(([n]) => favTags.includes(n));
+  const restEntries = tagEntries.filter(([n]) => !favTags.includes(n));
+  const orderedEntries = [...favEntries, ...restEntries];
+
+  // グループ分け
+  const groupMap = {};
+  const noGroup = [];
+  orderedEntries.forEach(entry => {
+    const g = tagGroups[entry[0]];
+    if (g) { if (!groupMap[g]) groupMap[g] = []; groupMap[g].push(entry); }
+    else noGroup.push(entry);
+  });
+
+  let html = '';
+  noGroup.forEach(([name, count]) => { html += renderTagItem(name, count, favTags); });
+  Object.entries(groupMap).forEach(([gName, entries]) => {
+    const isCollapsed = collapsed.includes('tag-' + gName);
+    html += `
+      <div style="margin-top:4px;">
+        <div onclick="toggleGroupCollapse('tag-${escHtml(gName)}')" style="display:flex;align-items:center;gap:6px;padding:4px 8px;cursor:pointer;border-radius:var(--radius-sm);" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
+          <span style="font-size:10px;color:var(--text3);display:inline-block;transform:rotate(${isCollapsed?'0':'90'}deg)">▶</span>
+          <span style="font-size:11px;font-weight:500;color:var(--text2);flex:1;">${escHtml(gName)}</span>
+          <span style="font-size:11px;color:var(--text3);">${entries.length}</span>
+        </div>
+        <div style="display:${isCollapsed?'none':'block'};padding-left:8px;">
+          ${entries.map(([n,c]) => renderTagItem(n, c, favTags)).join('')}
+        </div>
+      </div>`;
+  });
+  el.innerHTML = html;
+}
+
+function renderTagItem(name, count, favTags) {
+  const isFav = favTags.includes(name);
+  return `
+  <div class="nav-item" onclick="switchView('tag-${escHtml(name)}', this)" style="padding-right:4px;">
+    <span style="font-size:11px;color:var(--text3);">#</span>
+    <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${escHtml(name)}</span>
+    <span class="count">${count}</span>
+    <span onclick="event.stopPropagation();toggleFavTag('${escHtml(name)}')" style="font-size:11px;color:${isFav?'#f59e0b':'var(--border2)'};cursor:pointer;padding:2px 3px;flex-shrink:0;">★</span>
+  </div>`;
+}
+
+function toggleFavTag(tagName) {
+  let favs = getFavTags();
+  favs = favs.includes(tagName) ? favs.filter(t => t !== tagName) : [tagName, ...favs];
+  localStorage.setItem('fav_tags', JSON.stringify(favs));
+  renderTagList(STATE._lastTagEntries || []);
+}
+
+function renderTagSettingsList(tagEntries) {
+  const el = document.getElementById('tag-settings-list');
+  if (!el) return;
+  const tagGroups = getTagGroups();
+  const favTags = getFavTags();
+  el.innerHTML = tagEntries.map(([name, count]) => `
+    <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:0.5px solid var(--border);">
+      <span style="font-size:12px;color:var(--text3);flex-shrink:0;">#</span>
+      <span style="flex:1;font-size:13px;color:var(--text);">${escHtml(name)}</span>
+      <span style="font-size:11px;color:var(--text3);flex-shrink:0;">${count}件</span>
+      <input type="text" placeholder="グループ名（任意）" value="${escHtml(tagGroups[name]||'')}"
+        id="tgroup-${escHtml(name)}" style="width:120px;font-size:12px;padding:3px 7px;border:0.5px solid var(--border2);border-radius:4px;background:var(--surface2);color:var(--text);font-family:inherit;outline:none;" />
+      <span id="tfav-${escHtml(name)}" onclick="toggleFavTagSetting('${escHtml(name)}')" style="font-size:13px;color:${favTags.includes(name)?'#f59e0b':'var(--border2)'};cursor:pointer;" title="お気に入り">★</span>
+    </div>`).join('');
+}
+
+function toggleFavTagSetting(tagName) {
+  let favs = getFavTags();
+  if (favs.includes(tagName)) {
+    favs = favs.filter(t => t !== tagName);
+    document.getElementById(`tfav-${tagName}`).style.color = 'var(--border2)';
+  } else {
+    favs.unshift(tagName);
+    document.getElementById(`tfav-${tagName}`).style.color = '#f59e0b';
+  }
+  localStorage.setItem('fav_tags', JSON.stringify(favs));
+}
+
+function saveTagSettings() {
+  const entries = STATE._lastTagEntries || [];
+  const groups = {};
+  entries.forEach(([name]) => {
+    const el = document.getElementById(`tgroup-${name}`);
+    if (el?.value.trim()) groups[name] = el.value.trim();
+  });
+  localStorage.setItem('tag_groups', JSON.stringify(groups));
+  renderTagList(entries);
+  document.getElementById('tag-settings-status').textContent = '保存しました。';
+  document.getElementById('tag-settings-status').style.color = 'var(--success)';
+  setTimeout(() => { document.getElementById('tag-settings-status').textContent = ''; }, 2000);
+}
+
+// ===== ドラッグ&ドロップ =====
+let _dragSrc = null;
+function dragStart(e) {
+  _dragSrc = e.currentTarget;
+  e.dataTransfer.effectAllowed = 'move';
+  setTimeout(() => { if(_dragSrc) _dragSrc.style.opacity = '0.4'; }, 0);
+}
+function dragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  e.currentTarget.style.borderColor = 'var(--accent)';
+}
+function dragEnd(e) {
+  if(_dragSrc) _dragSrc.style.opacity = '1';
+  document.querySelectorAll('.proj-sort-item').forEach(el => el.style.borderColor = 'var(--border)');
+  _dragSrc = null;
+}
+function dropItem(e, type) {
+  e.preventDefault();
+  const target = e.currentTarget;
+  target.style.borderColor = 'var(--border)';
+  if (!_dragSrc || _dragSrc === target) return;
+  const parent = target.parentNode;
+  const srcIdx = Array.from(parent.children).indexOf(_dragSrc);
+  const tgtIdx = Array.from(parent.children).indexOf(target);
+  if (srcIdx < tgtIdx) parent.insertBefore(_dragSrc, target.nextSibling);
+  else parent.insertBefore(_dragSrc, target);
+}
+function initDragDrop(type) {
+  // HTML5 drag events already set via inline handlers
+}
+
 function updateStats() {
   const now = new Date();
   const todayStr = now.toISOString().slice(0,10);
@@ -648,36 +959,6 @@ function updateStats() {
   document.getElementById('cnt-all').textContent = active.length;
   document.getElementById('cnt-overdue').textContent = overdue.length;
   collectAndRenderTags(active);
-}
-
-function collectAndRenderTags(activeTasks) {
-  // タスクからタグを収集してカウント
-  const tagMap = {};
-  activeTasks.forEach(t => {
-    (t.tags || []).forEach(tag => {
-      tagMap[tag] = (tagMap[tag] || 0) + 1;
-    });
-  });
-  // タグ数の多い順にソート
-  const sorted = Object.entries(tagMap).sort((a, b) => b[1] - a[1]);
-  STATE.allTags = sorted.map(([name]) => name);
-  renderTagList(sorted);
-}
-
-function renderTagList(tagEntries) {
-  const el = document.getElementById('tag-list');
-  if (!el) return;
-  if (tagEntries.length === 0) {
-    el.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:4px 8px;">タグなし</div>';
-    return;
-  }
-  el.innerHTML = tagEntries.map(([name, count]) => `
-    <div class="nav-item" onclick="switchView('tag-${escHtml(name)}', this)">
-      <span style="font-size:11px;color:var(--text3);">#</span>
-      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${escHtml(name)}</span>
-      <span class="count">${count}</span>
-    </div>
-  `).join('');
 }
 
 function renderTaskView() {
