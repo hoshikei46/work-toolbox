@@ -360,8 +360,8 @@ button { cursor: pointer; font-family: inherit; font-size: 13px; border-radius: 
     </div>
 
     <!-- Settings tab -->
-    <div class="tab-content" id="content-settings" style="display:none;">
-      <div class="content">
+    <div class="tab-content" id="content-settings" style="display:none; height:calc(100vh - 52px - 44px); overflow-y:auto;">
+      <div style="padding:20px; max-width:800px; margin:0 auto 40px auto;">
 
         <!-- config.json 設定管理 -->
         <div class="card">
@@ -1049,14 +1049,19 @@ function switchTab(tab) {
     if (el) el.style.display = 'none';
     document.getElementById('tab-'+t)?.classList.toggle('active', t===tab);
   });
+  const h = 'calc(100vh - 52px - 44px)';
   if (tab === 'chat') {
-    document.getElementById('content-chat').style.display = 'flex';
+    const el = document.getElementById('content-chat');
+    el.style.display = 'flex'; el.style.height = h;
   } else if (tab === 'tasks') {
-    document.getElementById('content-tasks').style.display = 'block';
+    const el = document.getElementById('content-tasks');
+    el.style.display = 'block'; el.style.height = h; el.style.overflowY = 'auto';
   } else if (tab === 'extract') {
-    document.getElementById('content-extract').style.display = 'block';
+    const el = document.getElementById('content-extract');
+    el.style.display = 'block'; el.style.height = h;
   } else if (tab === 'settings') {
-    document.getElementById('content-settings').style.display = 'block';
+    const el = document.getElementById('content-settings');
+    el.style.display = 'block'; el.style.height = h; el.style.overflowY = 'auto';
   }
 }
 
