@@ -155,6 +155,12 @@ button { cursor: pointer; font-family: inherit; font-size: 13px; border-radius: 
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
 
+/* Toast */
+.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--surface); padding: 10px 16px; border-radius: var(--radius); font-size: 13px; display: flex; align-items: center; gap: 12px; z-index: 9999; box-shadow: 0 4px 16px rgba(0,0,0,0.15); animation: toast-in 0.2s ease; }
+.toast button { background: none; border: 1px solid rgba(255,255,255,0.4); color: white; padding: 3px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; font-family: inherit; }
+.toast button:hover { background: rgba(255,255,255,0.15); }
+@keyframes toast-in { from { opacity:0; transform: translateX(-50%) translateY(12px); } to { opacity:1; transform: translateX(-50%) translateY(0); } }
+
 /* Extract tab */
 .drop-zone { border: 1.5px dashed var(--border2); border-radius: var(--radius); padding: 40px 20px; text-align: center; cursor: pointer; transition: all 0.15s; background: var(--surface2); }
 .drop-zone:hover, .drop-zone.drag-over { border-color: var(--accent); background: var(--accent-bg); }
@@ -200,6 +206,10 @@ button { cursor: pointer; font-family: inherit; font-size: 13px; border-radius: 
       <div class="nav-item active" onclick="switchView('today', this)">
         <span>📅</span> 今日のタスク
         <span class="count" id="cnt-today">-</span>
+      </div>
+      <div class="nav-item" onclick="switchView('tomorrow', this)">
+        <span>📅</span> 明日のタスク
+        <span class="count" id="cnt-tomorrow">-</span>
       </div>
       <div class="nav-item" onclick="switchView('week', this)">
         <span>📆</span> 今週
@@ -268,6 +278,7 @@ button { cursor: pointer; font-family: inherit; font-size: 13px; border-radius: 
                 <option value="date">日付</option>
                 <option value="priority">優先度</option>
                 <option value="project">プロジェクト</option>
+                <option value="tag">タグ</option>
                 <option value="title">タイトル</option>
                 <option value="none">なし</option>
               </select>
@@ -277,6 +288,7 @@ button { cursor: pointer; font-family: inherit; font-size: 13px; border-radius: 
                 <option value="priority">優先度</option>
                 <option value="date">日付</option>
                 <option value="project">プロジェクト</option>
+                <option value="tag">タグ</option>
                 <option value="title">タイトル</option>
               </select>
               <span style="font-size:11px;color:var(--text3);">→</span>
@@ -286,6 +298,7 @@ button { cursor: pointer; font-family: inherit; font-size: 13px; border-radius: 
                 <option value="priority">優先度</option>
                 <option value="date">日付</option>
                 <option value="project">プロジェクト</option>
+                <option value="tag">タグ</option>
               </select>
             </div>
           </div>
@@ -372,7 +385,13 @@ button { cursor: pointer; font-family: inherit; font-size: 13px; border-radius: 
                 <textarea id="add-content" rows="2" placeholder="メモを入力..." style="width:100%;border:0.5px solid var(--border2);border-radius:var(--radius-sm);padding:6px 8px;font-size:13px;font-family:inherit;outline:none;background:var(--surface2);color:var(--text);resize:vertical;line-height:1.5;"></textarea>
               </div>
             </div>
-            <div id="task-view-title" class="card-title">今日のタスク</div>
+            <div style="display:flex;align-items:center;margin-bottom:12px;">
+              <div id="task-view-title" style="font-size:14px;font-weight:500;color:var(--text);flex:1;">今日のタスク</div>
+              <div id="kanban-toggle" style="display:none;gap:4px;">
+                <button id="btn-list-view" class="btn btn-primary" style="font-size:12px;padding:4px 10px;" onclick="setViewMode('list')">☰ リスト</button>
+                <button id="btn-kanban-view" class="btn" style="font-size:12px;padding:4px 10px;" onclick="setViewMode('kanban')">⊞ カンバン</button>
+              </div>
+            </div>
             <div id="task-list"><div class="loading"><div class="spinner"></div>読み込み中...</div></div>
           </div>
         </div>
@@ -581,6 +600,7 @@ button { cursor: pointer; font-family: inherit; font-size: 13px; border-radius: 
           <div id="tag-settings-list" style="max-height:400px;overflow-y:auto;"></div>
           <div style="margin-top:12px;">
             <button class="btn-primary" onclick="saveTagSettings()">タグ設定を保存</button>
+            <button class="btn" onclick="sortTagsAlpha()">A→Z 並び替え</button>
           </div>
           <div id="tag-settings-status" style="margin-top:8px;font-size:13px;color:var(--text3);"></div>
         </div>
@@ -616,6 +636,7 @@ const STATE = {
   allTags: [],
   currentView: 'today',
   currentProject: null,
+  viewMode: 'list', // 'list' or 'kanban'
   chatHistory: [],
   // 時間管理
   schedule: {
@@ -970,13 +991,22 @@ function resetProjOrder() {
   setTimeout(() => { document.getElementById('proj-sort-status').textContent = ''; }, 2000);
 }
 
+function getTagOrder() {
+  try { return JSON.parse(localStorage.getItem('tag_order') || '[]'); } catch(e) { return []; }
+}
+
 // ===== タグ管理 =====
 function collectAndRenderTags(activeTasks) {
   const tagMap = {};
   activeTasks.forEach(t => {
     (t.tags || []).forEach(tag => { tagMap[tag] = (tagMap[tag] || 0) + 1; });
   });
-  const sorted = Object.entries(tagMap).sort((a, b) => b[1] - a[1]);
+  // 保存済み順序があればそれを優先、残りは件数順
+  const order = getTagOrder();
+  const allEntries = Object.entries(tagMap);
+  const ordered = order.filter(n => tagMap[n] !== undefined).map(n => [n, tagMap[n]]);
+  const rest = allEntries.filter(([n]) => !order.includes(n)).sort((a, b) => b[1] - a[1]);
+  const sorted = [...ordered, ...rest];
   STATE.allTags = sorted.map(([name]) => name);
   STATE._lastTagEntries = sorted;
   renderTagList(sorted);
@@ -1051,13 +1081,16 @@ function renderTagSettingsList(tagEntries) {
   const tagGroups = getTagGroups();
   const favTags = getFavTags();
   el.innerHTML = tagEntries.map(([name, count]) => `
-    <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:0.5px solid var(--border);">
+    <div class="tag-sort-item" data-tag="${escHtml(name)}" draggable="true"
+      ondragstart="dragStart(event)" ondragover="dragOver(event)" ondrop="dropItem(event,'tag')" ondragend="dragEnd(event)"
+      style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:0.5px solid var(--border);cursor:grab;">
+      <span style="color:var(--text3);font-size:14px;flex-shrink:0;">⠿</span>
       <span style="font-size:12px;color:var(--text3);flex-shrink:0;">#</span>
       <span style="flex:1;font-size:13px;color:var(--text);">${escHtml(name)}</span>
       <span style="font-size:11px;color:var(--text3);flex-shrink:0;">${count}件</span>
       <input type="text" placeholder="グループ名（任意）" value="${escHtml(tagGroups[name]||'')}"
-        id="tgroup-${escHtml(name)}" style="width:120px;font-size:12px;padding:3px 7px;border:0.5px solid var(--border2);border-radius:4px;background:var(--surface2);color:var(--text);font-family:inherit;outline:none;" />
-      <span id="tfav-${escHtml(name)}" onclick="toggleFavTagSetting('${escHtml(name)}')" style="font-size:13px;color:${favTags.includes(name)?'#f59e0b':'var(--border2)'};cursor:pointer;" title="お気に入り">★</span>
+        id="tgroup-${escHtml(name)}" style="width:110px;font-size:12px;padding:3px 7px;border:0.5px solid var(--border2);border-radius:4px;background:var(--surface2);color:var(--text);font-family:inherit;outline:none;" />
+      <span id="tfav-${escHtml(name)}" onclick="toggleFavTagSetting('${escHtml(name)}')" style="font-size:13px;color:${favTags.includes(name)?'#f59e0b':'var(--border2)'};cursor:pointer;flex-shrink:0;" title="お気に入り">★</span>
     </div>`).join('');
 }
 
@@ -1073,15 +1106,43 @@ function toggleFavTagSetting(tagName) {
   localStorage.setItem('fav_tags', JSON.stringify(favs));
 }
 
-function saveTagSettings() {
+function sortTagsAlpha() {
   const entries = STATE._lastTagEntries || [];
+  const favTags = getFavTags();
+  const favEntries = entries.filter(([n]) => favTags.includes(n));
+  const restEntries = entries.filter(([n]) => !favTags.includes(n));
+  // それぞれアルファベット（日本語含む）順にソート
+  const sortFn = (a, b) => a[0].localeCompare(b[0], 'ja');
+  const sorted = [...favEntries.sort(sortFn), ...restEntries.sort(sortFn)];
+  STATE._lastTagEntries = sorted;
+  renderTagSettingsList(sorted);
+  // 順序をlocalStorageに保存
+  const order = sorted.map(([n]) => n);
+  localStorage.setItem('tag_order', JSON.stringify(order));
+  renderTagList(sorted);
+}
+
+function saveTagSettings() {
+  // ドラッグ後の順序を取得
+  const items = document.querySelectorAll('.tag-sort-item');
+  const order = Array.from(items).map(el => el.dataset.tag);
+  localStorage.setItem('tag_order', JSON.stringify(order));
+  // グループを保存
   const groups = {};
-  entries.forEach(([name]) => {
-    const el = document.getElementById(`tgroup-${name}`);
-    if (el?.value.trim()) groups[name] = el.value.trim();
+  items.forEach(el => {
+    const name = el.dataset.tag;
+    const g = document.getElementById(`tgroup-${name}`)?.value.trim();
+    if (g) groups[name] = g;
   });
   localStorage.setItem('tag_groups', JSON.stringify(groups));
-  renderTagList(entries);
+  // サイドバーに反映
+  if (STATE._lastTagEntries) {
+    const orderedEntries = order
+      .map(n => STATE._lastTagEntries.find(([name]) => name === n))
+      .filter(Boolean);
+    const rest = STATE._lastTagEntries.filter(([n]) => !order.includes(n));
+    renderTagList([...orderedEntries, ...rest]);
+  }
   document.getElementById('tag-settings-status').textContent = '保存しました。';
   document.getElementById('tag-settings-status').style.color = 'var(--success)';
   setTimeout(() => { document.getElementById('tag-settings-status').textContent = ''; }, 2000);
@@ -1146,12 +1207,17 @@ function updateStats() {
     const ds = dueDateStr(t.dueDate);
     return ds && ds < today;
   });
+  const tomorrowJST = new Date(new Date().getTime() + 9*60*60*1000);
+  tomorrowJST.setDate(tomorrowJST.getDate() + 1);
+  const tomorrow = tomorrowJST.toISOString().slice(0,10);
+  const tomorrowTasks = active.filter(t => dueDateStr(t.dueDate) === tomorrow);
   const nodateTasks = active.filter(t => !t.dueDate);
   document.getElementById('s-today').textContent = todayTasks.length;
   document.getElementById('s-week').textContent = weekTasks.length;
   document.getElementById('s-overdue').textContent = overdueTasks.length;
   document.getElementById('s-all').textContent = active.length;
   document.getElementById('cnt-today').textContent = todayTasks.length;
+  document.getElementById('cnt-tomorrow').textContent = tomorrowTasks.length;
   document.getElementById('cnt-week').textContent = weekTasks.length;
   document.getElementById('cnt-all').textContent = active.length;
   document.getElementById('cnt-nodate').textContent = nodateTasks.length;
@@ -1171,24 +1237,46 @@ function renderTaskView() {
   if (STATE.currentView === 'today') {
     tasks = tasks.filter(t => dueDateStr(t.dueDate) === today);
     title = '今日のタスク';
+  } else if (STATE.currentView === 'tomorrow') {
+    const tomorrowJST = new Date(new Date().getTime() + 9*60*60*1000);
+    tomorrowJST.setDate(tomorrowJST.getDate() + 1);
+    const tomorrow = tomorrowJST.toISOString().slice(0,10);
+    tasks = tasks.filter(t => dueDateStr(t.dueDate) === tomorrow);
+    title = '明日のタスク';
   } else if (STATE.currentView === 'week') {
-    tasks = tasks.filter(t => t.dueDate && new Date(t.dueDate) <= weekEnd);
+    tasks = tasks.filter(t => t.dueDate && new Date(t.dueDate) <= weekEnd || !t.dueDate);
     title = '今週のタスク';
+    document.getElementById('kanban-toggle').style.display = 'flex';
+    if (STATE.viewMode === 'kanban') {
+      document.getElementById('task-view-title').textContent = title;
+      renderKanban(tasks);
+      return;
+    }
+    document.getElementById('btn-list-view').classList.add('btn-primary');
+    document.getElementById('btn-list-view').classList.remove('btn');
+    document.getElementById('btn-kanban-view').classList.remove('btn-primary');
+    document.getElementById('btn-kanban-view').classList.add('btn');
   } else if (STATE.currentView === 'nodate') {
+    document.getElementById('kanban-toggle').style.display = 'none';
     tasks = tasks.filter(t => !t.dueDate);
     title = '日付なしのタスク';
   } else if (STATE.currentView === 'overdue') {
+    document.getElementById('kanban-toggle').style.display = 'none';
     tasks = tasks.filter(t => { const ds = dueDateStr(t.dueDate); return ds && ds < today; });
     title = '期限切れのタスク';
   } else if (STATE.currentView.startsWith('project-')) {
+    document.getElementById('kanban-toggle').style.display = 'none';
     const pid = STATE.currentView.replace('project-', '');
     tasks = tasks.filter(t => t.projectId === pid);
     const proj = STATE.projects.find(p => p.id === pid);
     title = proj ? proj.name : 'プロジェクト';
   } else if (STATE.currentView.startsWith('tag-')) {
+    document.getElementById('kanban-toggle').style.display = 'none';
     const tag = STATE.currentView.replace('tag-', '');
     tasks = tasks.filter(t => (t.tags || []).includes(tag));
     title = `#${tag}`;
+  } else {
+    document.getElementById('kanban-toggle').style.display = 'none';
   }
 
   // 検索フィルター（検索中は全タスクから検索）
@@ -1213,6 +1301,7 @@ function renderTaskView() {
     if (key === 'priority') return -(t.priority || 0);
     if (key === 'date') return t.dueDate ? new Date(t.dueDate).getTime() : 9999999999999;
     if (key === 'project') return STATE.projects.find(p => p.id === t.projectId)?.name || '';
+    if (key === 'tag') return (t.tags || [])[0] || '';
     if (key === 'title') return t.title.toLowerCase();
     return 0;
   }
@@ -1277,6 +1366,174 @@ function renderTaskView() {
   }).join('');
 }
 
+// ========== KANBAN ==========
+function getKanbanColumns() {
+  const today = todayJST();
+  // JST基準で翌日以降を計算
+  const addDays = (baseStr, n) => {
+    const d = new Date(baseStr + 'T00:00:00+09:00');
+    d.setDate(d.getDate() + n);
+    const jst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+    return jst.toISOString().slice(0, 10);
+  };
+  const tomorrow = addDays(today, 1);
+  const dayAfter = addDays(today, 2);
+  return [
+    { id: 'today',    label: '今日',          dateStr: today,    color: '#2563eb' },
+    { id: 'tomorrow', label: '明日',          dateStr: tomorrow, color: '#16a34a' },
+    { id: 'dayafter', label: '明後日',        dateStr: dayAfter, color: '#d97706' },
+    { id: 'thisweek', label: '今週（3日後〜）', dateStr: null,    color: '#7c3aed' },
+    { id: 'nodate',   label: '未分類',        dateStr: 'nodate', color: '#6b7280' },
+  ];
+}
+
+function renderKanban(allTasks) {
+  const el = document.getElementById('task-list');
+  const today = todayJST();
+  const cols = getKanbanColumns();
+
+  function getColId(task) {
+    if (!task.dueDate) return 'nodate';
+    const ds = dueDateStr(task.dueDate);
+    if (ds === cols[0].dateStr) return 'today';
+    if (ds === cols[1].dateStr) return 'tomorrow';
+    if (ds === cols[2].dateStr) return 'dayafter';
+    return 'thisweek';
+  }
+
+  const colTasks = {};
+  cols.forEach(c => colTasks[c.id] = []);
+  allTasks.filter(t => t.status === 0).forEach(task => {
+    const cid = getColId(task);
+    if (colTasks[cid]) colTasks[cid].push(task);
+  });
+
+  // 並び順を各列に適用
+  const sortKeys = [
+    document.getElementById('task-sort-1')?.value || 'date',
+    document.getElementById('task-sort-2')?.value || 'none',
+    document.getElementById('task-sort-3')?.value || 'none',
+  ].filter(k => k !== 'none');
+
+  function sortVal(t, key) {
+    if (key === 'priority') return -(t.priority || 0);
+    if (key === 'date') return t.dueDate ? new Date(t.dueDate).getTime() : 9999999999999;
+    if (key === 'project') return STATE.projects.find(p => p.id === t.projectId)?.name || '';
+    if (key === 'tag') return (t.tags || [])[0] || '';
+    if (key === 'title') return t.title.toLowerCase();
+    return 0;
+  }
+
+  const sortFn = (a, b) => {
+    for (const key of sortKeys) {
+      const va = sortVal(a, key), vb = sortVal(b, key);
+      if (va < vb) return -1;
+      if (va > vb) return 1;
+    }
+    return 0;
+  };
+
+  cols.forEach(c => { colTasks[c.id].sort(sortFn); });
+
+  el.innerHTML = `
+  <div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:8px;min-height:400px;">
+    ${cols.map(col => `
+    <div style="flex:0 0 220px;display:flex;flex-direction:column;background:var(--surface2);border-radius:var(--radius);overflow:hidden;">
+      <div style="padding:10px 12px;background:${col.color}15;border-bottom:2px solid ${col.color};display:flex;align-items:center;gap:6px;">
+        <span style="font-size:13px;font-weight:500;color:${col.color};flex:1;">${col.label}</span>
+        <span style="font-size:11px;color:var(--text3);background:var(--surface);padding:1px 6px;border-radius:99px;">${colTasks[col.id].length}</span>
+      </div>
+      <div class="kanban-col" data-col="${col.id}"
+        style="flex:1;padding:8px;display:flex;flex-direction:column;gap:6px;min-height:200px;"
+        ondragover="kanbanDragOver(event)" ondrop="kanbanDrop(event,'${col.id}')" ondragleave="kanbanDragLeave(event)">
+        ${colTasks[col.id].map(task => renderKanbanCard(task)).join('')}
+      </div>
+    </div>`).join('')}
+  </div>`;
+}
+
+function renderKanbanCard(task) {
+  const proj = STATE.allProjects.find(p => p.id === task.projectId) || STATE.projects.find(p => p.id === task.projectId);
+  const pClass = task.priority === 5 ? 'p-high' : task.priority === 3 ? 'p-mid' : 'p-low';
+  const items = task.items || [];
+  const itemDone = items.filter(i => i.status === 1).length;
+  const est = getEstimatedMinutes(task);
+  const ds = dueDateStr(task.dueDate);
+  const today = todayJST();
+  const isOverdue = ds && ds < today;
+  return `
+  <div class="kanban-card" data-task-id="${task.id}" data-project-id="${task.projectId}"
+    draggable="true" ondragstart="kanbanDragStart(event)"
+    onclick="openTaskDetail('${task.id}')"
+    style="background:var(--surface);border-radius:var(--radius-sm);padding:9px 10px;cursor:pointer;border-left:3px solid ${task.priority===5?'var(--danger)':task.priority===3?'#f59e0b':'var(--border2)'};">
+    <div style="font-size:13px;color:var(--text);line-height:1.4;margin-bottom:5px;">${escHtml(task.title)}</div>
+    <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
+      ${proj ? `<span style="font-size:10px;padding:1px 5px;background:var(--surface2);border-radius:99px;color:var(--text3);">${escHtml(proj.name)}</span>` : ''}
+      ${isOverdue ? `<span style="font-size:10px;color:var(--danger);">⚠ ${ds}</span>` : ''}
+      ${est !== null ? `<span style="font-size:10px;color:var(--accent);">⏱${formatMinutes(est)}</span>` : ''}
+      ${items.length > 0 ? `<span style="font-size:10px;color:var(--text3);">${itemDone}/${items.length}</span>` : ''}
+      ${(task.tags||[]).slice(0,2).map(tg=>`<span style="font-size:10px;padding:1px 5px;background:var(--accent-bg);color:var(--accent);border-radius:99px;">#${escHtml(tg)}</span>`).join('')}
+    </div>
+  </div>`;
+}
+
+let _kanbanDragTask = null;
+
+function kanbanDragStart(e) {
+  _kanbanDragTask = {
+    taskId: e.currentTarget.dataset.taskId,
+    projectId: e.currentTarget.dataset.projectId,
+  };
+  e.currentTarget.style.opacity = '0.4';
+  e.dataTransfer.effectAllowed = 'move';
+}
+
+function kanbanDragOver(e) {
+  e.preventDefault();
+  e.currentTarget.style.background = 'var(--accent-bg)';
+}
+
+function kanbanDragLeave(e) {
+  e.currentTarget.style.background = '';
+}
+
+async function kanbanDrop(e, colId) {
+  e.preventDefault();
+  e.currentTarget.style.background = '';
+  if (!_kanbanDragTask) return;
+  const { taskId, projectId } = _kanbanDragTask;
+  _kanbanDragTask = null;
+  document.querySelectorAll('.kanban-card').forEach(c => c.style.opacity = '1');
+
+  const cols = getKanbanColumns();
+  const col = cols.find(c => c.id === colId);
+  if (!col) return;
+
+  const task = STATE.tasks.find(t => t.id === taskId);
+  if (!task) return;
+
+  let newDueDate = null;
+  if (col.id === 'nodate') {
+    newDueDate = null;
+  } else {
+    newDueDate = col.dateStr + 'T00:00:00+0900';
+  }
+
+  try {
+    const body = { id: taskId, title: task.title, projectId: task.projectId };
+    if (newDueDate) body.dueDate = newDueDate;
+    else body.dueDate = null;
+    await ttPost(`/task/${taskId}`, body);
+    // ローカルSTATEも更新
+    STATE.tasks = STATE.tasks.map(t => t.id === taskId ? { ...t, dueDate: newDueDate } : t);
+    updateStats();
+    renderTaskView();
+  } catch(e) {
+    alert('日付の変更に失敗しました: ' + e.message);
+    renderTaskView();
+  }
+}
+
 function escHtml(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
@@ -1284,10 +1541,27 @@ function escHtml(s) {
 // ========== ACTIONS ==========
 function switchView(view, el) {
   STATE.currentView = view;
+  STATE.viewMode = 'list';
   document.querySelectorAll('.nav-item').forEach(e => e.classList.remove('active'));
   if (el) el.classList.add('active');
   renderTaskView();
   switchTab('tasks');
+}
+
+function setViewMode(mode) {
+  STATE.viewMode = mode;
+  if (mode === 'kanban') {
+    document.getElementById('btn-kanban-view').classList.add('btn-primary');
+    document.getElementById('btn-kanban-view').classList.remove('btn');
+    document.getElementById('btn-list-view').classList.remove('btn-primary');
+    document.getElementById('btn-list-view').classList.add('btn');
+  } else {
+    document.getElementById('btn-list-view').classList.add('btn-primary');
+    document.getElementById('btn-list-view').classList.remove('btn');
+    document.getElementById('btn-kanban-view').classList.remove('btn-primary');
+    document.getElementById('btn-kanban-view').classList.add('btn');
+  }
+  renderTaskView();
 }
 
 function switchTab(tab) {
@@ -1390,16 +1664,108 @@ async function addTask() {
   }
 }
 
+let _undoTimer = null;
+let _undoTask = null;
+
 async function completeTask(taskId, projectId) {
+  const task = STATE.tasks.find(t => t.id === taskId);
+  if (!task) return;
+
+  // ローカルのみ先に完了状態にして表示を更新
+  STATE.tasks = STATE.tasks.map(t => t.id === taskId ? {...t, status: 2} : t);
+  updateStats();
+  renderTaskView();
+  if (STATE.openTaskId === taskId) closeTaskDetail();
+
+  // Undoトーストを表示（5秒）
+  _undoTask = { taskId, projectId, task };
+  showUndoToast(task.title);
+
+  // 5秒後にTickTickへ反映
+  _undoTimer = setTimeout(async () => {
+    _undoTask = null;
+    try {
+      await ttPost(`/project/${projectId}/task/${taskId}/complete`, {});
+    } catch(e) {
+      // 失敗したら元に戻す
+      STATE.tasks = STATE.tasks.map(t => t.id === taskId ? {...t, status: 0} : t);
+      updateStats();
+      renderTaskView();
+      showToast('完了処理に失敗しました。元に戻しました。', null, 3000);
+    }
+  }, 6000);
+}
+
+function showUndoToast(title) {
+  removeToast();
+  const div = document.createElement('div');
+  div.className = 'toast';
+  div.id = 'undo-toast';
+  div.innerHTML = `<span>「${escHtml(title.slice(0,20))}${title.length>20?'...':''}」を完了にしました</span><button onclick="undoComplete()">取り消す</button>`;
+  document.body.appendChild(div);
+  setTimeout(removeToast, 6000);
+}
+
+function showToast(msg, btnLabel, duration = 3000) {
+  removeToast();
+  const div = document.createElement('div');
+  div.className = 'toast';
+  div.id = 'undo-toast';
+  div.innerHTML = `<span>${escHtml(msg)}</span>${btnLabel ? `<button onclick="undoComplete()">${escHtml(btnLabel)}</button>` : ''}`;
+  document.body.appendChild(div);
+  setTimeout(removeToast, duration);
+}
+
+function removeToast() {
+  document.getElementById('undo-toast')?.remove();
+}
+
+async function undoComplete() {
+  if (!_undoTask) return;
+  clearTimeout(_undoTimer);
+  const { taskId, projectId } = _undoTask;
+  _undoTask = null;
+  _undoTimer = null;
+  removeToast();
+  // ローカルを未完了に戻す
+  STATE.tasks = STATE.tasks.map(t => t.id === taskId ? {...t, status: 0} : t);
+  updateStats();
+  renderTaskView();
+}
+
+async function deleteTask(taskId, projectId) {
+  const task = STATE.tasks.find(t => t.id === taskId);
+  if (!task) return;
+  if (!confirm(`「${task.title}」を削除しますか？\nこの操作は取り消せません。`)) return;
   try {
-    await ttPost(`/project/${projectId}/task/${taskId}/complete`, {});
-    STATE.tasks = STATE.tasks.map(t => t.id === taskId ? {...t, status: 2} : t);
+    await fetch(`${API}/project/${projectId}/task/${taskId}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${STATE.token}` }
+    });
+    STATE.tasks = STATE.tasks.filter(t => t.id !== taskId);
+    closeTaskDetail();
     updateStats();
     renderTaskView();
-    if (STATE.openTaskId === taskId) closeTaskDetail();
   } catch(e) {
-    alert('完了処理に失敗しました: ' + e.message);
+    alert('削除に失敗しました: ' + e.message);
   }
+}
+
+function saveInlineEstimated(taskId) {
+  const val = parseInt(document.getElementById('inline-estimated')?.value);
+  const statusEl = document.getElementById('inline-est-status');
+  if (!val || val <= 0) {
+    statusEl.textContent = '値を入力してください';
+    statusEl.style.color = 'var(--danger)';
+    return;
+  }
+  STATE.estimatedMinutes[taskId] = val;
+  localStorage.setItem('estimated_minutes', JSON.stringify(STATE.estimatedMinutes));
+  statusEl.textContent = '保存しました ✓';
+  statusEl.style.color = 'var(--success)';
+  updateTimeBar();
+  renderTaskView();
+  setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 2000);
 }
 
 // ========== TASK DETAIL PANEL ==========
@@ -1553,6 +1919,18 @@ function renderDetailPanel(task, editMode = false) {
         ${(task.tags||[]).map(tg => `<span style="font-size:12px;padding:3px 8px;background:var(--surface2);border-radius:99px;color:var(--text2);">#${escHtml(tg)}</span>`).join('')}
       </div>
 
+      <!-- 見積もり時間（表示モードでインライン編集） -->
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;padding-bottom:14px;border-bottom:0.5px solid var(--border);">
+        <span style="font-size:12px;color:var(--text2);">⏱ 見積もり時間</span>
+        <input type="number" id="inline-estimated" min="5" max="480" step="5"
+          value="${getEstimatedMinutes(task) ?? ''}"
+          placeholder="分"
+          style="width:70px;border:0.5px solid var(--border2);border-radius:var(--radius-sm);padding:4px 8px;font-size:13px;font-family:inherit;outline:none;background:var(--surface2);color:var(--text);text-align:right;" />
+        <span style="font-size:12px;color:var(--text3);">分</span>
+        <button onclick="saveInlineEstimated('${task.id}')" class="btn" style="font-size:12px;padding:3px 10px;">保存</button>
+        <span id="inline-est-status" style="font-size:11px;color:var(--text3);"></span>
+      </div>
+
       ${task.content ? `
       <div style="margin-bottom:14px;padding-bottom:14px;border-bottom:0.5px solid var(--border);">
         <div style="font-size:12px;font-weight:500;color:var(--text2);margin-bottom:6px;">📝 メモ</div>
@@ -1579,9 +1957,14 @@ function renderDetailPanel(task, editMode = false) {
       </div>` : ''}
 
       ${task.status !== 2 ? `
-      <div style="margin-top:16px;">
-        <button class="btn-primary" style="width:100%;" onclick="completeTask('${task.id}','${task.projectId}')">タスクを完了にする</button>
-      </div>` : '<div style="margin-top:16px;text-align:center;font-size:13px;color:var(--success);">✓ 完了済み</div>'}
+      <div style="margin-top:16px;display:flex;gap:8px;">
+        <button class="btn-primary" style="flex:1;" onclick="completeTask('${task.id}','${task.projectId}')">タスクを完了にする</button>
+        <button class="btn" style="color:var(--danger);border-color:var(--danger);flex-shrink:0;" onclick="deleteTask('${task.id}','${task.projectId}')">削除</button>
+      </div>` : `
+      <div style="margin-top:16px;display:flex;gap:8px;align-items:center;">
+        <div style="flex:1;text-align:center;font-size:13px;color:var(--success);">✓ 完了済み</div>
+        <button class="btn" style="color:var(--danger);border-color:var(--danger);flex-shrink:0;" onclick="deleteTask('${task.id}','${task.projectId}')">削除</button>
+      </div>`}
     </div>`;
   }
 }
@@ -2317,7 +2700,7 @@ async function registerExtractedTasks() {
 }
 
 // ========== SETTINGS ==========
-const SETTINGS_KEYS = ['tt_token','claude_apikey','user_name','user_role','hidden_projects','fav_projects','work_start','work_end','default_available','private_tags','estimated_minutes'];
+const SETTINGS_KEYS = ['tt_token','claude_apikey','user_name','user_role','hidden_projects','fav_projects','work_start','work_end','default_available','private_tags','estimated_minutes','tag_order','tag_groups','fav_tags'];
 
 function saveConfigJson() {
   const data = {};
