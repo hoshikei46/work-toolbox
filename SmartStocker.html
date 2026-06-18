@@ -1,25 +1,26 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta name="robots" content="noindex, nofollow">    <meta charset="UTF-8">
+    <meta name="robots" content="noindex, nofollow">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>SmartStocker 1.6</title>
-    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>SmartStocker 1.6 (Pure JS Fixed)</title>
     
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
-    
-    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+
+    <script src="https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body class="bg-blue-50 min-h-screen font-sans text-slate-800">
     <div id="root"></div>
 
-    <script type="text/babel">
+    <script>
         const firebaseConfig = {
             apiKey: "AIzaSyBA4GCW-DXP2SenQBotyF0G5PVZ5IPrpTc",
             authDomain: "work-stock-app.firebaseapp.com",
@@ -33,45 +34,69 @@
             firebase.initializeApp(firebaseConfig);
         }
         const db = firebase.firestore();
-        const { useState, useEffect, useMemo } = React;
+        const { useState, useEffect, useRef, useMemo } = React;
+        const e = React.createElement;
 
         const defaultCategories = ['事務用品', '日用品・清掃', 'トナー・インク', '用紙', 'その他'];
         const defaultUnits = ['個', '本', '箱', '冊', '包', '枚', 'セット'];
         const defaultTags = ['よく出る', '要発注', '発注済', '高額品'];
         const defaultVendors = ['アスクル', 'カウネット', 'Amazon', '地元業者', 'その他'];
 
+        // バーコードスキャナー
         function BarcodeScanner({ onScan, onClose }) {
+            const videoRef = useRef(null);
+            const controlsRef = useRef(null);
+
             useEffect(() => {
-                const html5QrCode = new Html5Qrcode("reader");
-                const config = { fps: 10, qrbox: { width: 250, height: 150 } };
-                
-                html5QrCode.start({ facingMode: "environment" }, config, (decodedText) => {
-                    html5QrCode.stop().then(() => {
-                        onScan(decodedText);
-                    });
-                }).catch(err => {
-                    console.log("カメラの起動に失敗しました", err);
-                    alert("カメラへのアクセスを許可してください。");
-                });
+                const startScanner = async () => {
+                    try {
+                        const ZXingLib = window.ZXing || ZebraXing; 
+                        const codeReader = new ZXingLib.BrowserMultiFormatReader();
+                        const devices = await codeReader.listVideoInputDevices();
+                        if (!devices || devices.length === 0) {
+                            alert("カメラが見つかりません。");
+                            onClose();
+                            return;
+                        }
+                        const device = devices.find(d =>
+                            d.label.toLowerCase().includes('back') ||
+                            d.label.toLowerCase().includes('rear') ||
+                            d.label.includes('背面')
+                        ) || devices[devices.length - 1];
 
-                return () => {
-                    if (html5QrCode.isScanning) html5QrCode.stop().catch(e => console.log(e));
+                        controlsRef.current = await codeReader.decodeFromVideoDevice(
+                            device.deviceId,
+                            videoRef.current,
+                            (result) => {
+                                if (result) {
+                                    if (controlsRef.current) controlsRef.current.stop();
+                                    onScan(result.getText());
+                                }
+                            }
+                        );
+                    } catch (err) {
+                        console.error(err);
+                        alert("カメラへのアクセスを許可してください。");
+                        onClose();
+                    }
                 };
-            }, [onScan]);
+                startScanner();
+                return () => {
+                    if (controlsRef.current) {
+                        try { controlsRef.current.stop(); } catch(e) {}
+                    }
+                };
+            }, [onClose, onScan]);
 
-            return (
-                <div className="fixed inset-0 bg-slate-900/90 z-[60] flex flex-col items-center justify-center p-4">
-                    <div className="w-full max-w-md bg-white rounded-2xl overflow-hidden shadow-2xl">
-                        <div className="p-4 bg-blue-600 text-white font-bold flex justify-between items-center text-sm">
-                            <span>📷 バーコードをスキャン</span>
-                            <button onClick={onClose} className="bg-blue-700 px-3 py-1 rounded-lg">閉じる</button>
-                        </div>
-                        <div id="reader" className="w-full"></div>
-                        <div className="p-4 text-center text-xs text-slate-500 font-bold bg-slate-50">
-                            商品のバーコードを枠内に合わせてください。
-                        </div>
-                    </div>
-                </div>
+            return e('div', { className: "fixed inset-0 bg-slate-900/90 z-[60] flex flex-col items-center justify-center p-4" },
+                e('div', { className: "w-full max-w-md bg-white rounded-2xl overflow-hidden shadow-2xl" },
+                    e('div', { className: "p-4 bg-blue-600 text-white font-bold flex justify-between items-center text-sm" },
+                        e('span', null, "📷 バーコードをスキャン"),
+                        e('button', { onClick: onClose, className: "bg-blue-700 px-3 py-1 rounded-lg" }, "閉じる")
+                    ),
+                    e('video', { ref: videoRef, className: "w-full", style: { maxHeight: '300px', objectFit: 'cover' } }),
+                    e('div', { className: "p-4 text-center text-xs text-slate-500 font-bold bg-slate-50" }, "商品のバーコードをカメラに向けてください。")
+                )
             );
         }
 
@@ -79,38 +104,30 @@
             const [groupId, setGroupId] = useState(localStorage.getItem('smartstocker_group') || '');
             const [isLoggedIn, setIsLoggedIn] = useState(!!groupId);
             const [items, setItems] = useState([]);
-            
             const [categories, setCategories] = useState(defaultCategories);
             const [units, setUnits] = useState(defaultUnits);
             const [tagsMaster, setTagsMaster] = useState(defaultTags);
-            const [vendors, setVendors] = useState(defaultVendors); 
+            const [vendors, setVendors] = useState(defaultVendors);
             const [errorMsg, setErrorMsg] = useState('');
-
             const [searchQuery, setSearchQuery] = useState('');
             const [filterCategory, setFilterCategory] = useState('');
             const [filterTag, setFilterTag] = useState('');
-            const [filterLowStock, setFilterLowStock] = useState(false); 
-            const [sortBy, setSortBy] = useState('category'); 
-
+            const [filterLowStock, setFilterLowStock] = useState(false);
+            const [sortBy, setSortBy] = useState('category');
             const [showCategoryModal, setShowCategoryModal] = useState(false);
             const [showUnitModal, setShowUnitModal] = useState(false);
             const [showTagModal, setShowTagModal] = useState(false);
-            const [showVendorModal, setShowVendorModal] = useState(false); 
-            
-            const [newItemInput, setNewItemInput] = useState(''); 
-            const [isProcessing, setIsProcessing] = useState(false); // ★ 処理中フラグ
-
+            const [showVendorModal, setShowVendorModal] = useState(false);
+            const [newItemInput, setNewItemInput] = useState('');
+            const [isProcessing, setIsProcessing] = useState(false);
             const [itemModal, setItemModal] = useState({ isOpen: false, mode: 'add', itemId: null });
             const [formData, setFormData] = useState({
-                name: '', category: '', unit: '', currentStock: 0, 
-                orderThreshold: 0, barcode: '', selectedTags: [], vendor: '', itemCode: '' 
+                name: '', category: '', unit: '', currentStock: 0, orderThreshold: 0, barcode: '', selectedTags: [], vendor: '', itemCode: ''
             });
-
             const [scanMode, setScanMode] = useState(null);
 
             useEffect(() => {
                 if (!isLoggedIn) return;
-                
                 const unsubItems = db.collection(`groups/${groupId}/items`).orderBy('name').onSnapshot((snapshot) => {
                     setItems(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
                     setErrorMsg('');
@@ -119,15 +136,13 @@
                 const getMaster = (docName, setter, defaultList) => {
                     return db.collection(`groups/${groupId}/settings`).doc(docName).onSnapshot((snap) => {
                         if (snap.exists && snap.data().list && snap.data().list.length > 0) setter(snap.data().list);
-                        else { setter(defaultList); db.collection(`groups/${groupId}/settings`).doc(docName).set({ list: defaultList }, {merge: true}); }
+                        else { setter(defaultList); db.collection(`groups/${groupId}/settings`).doc(docName).set({ list: defaultList }, { merge: true }); }
                     });
                 };
-
                 const unsubCat = getMaster('categories', setCategories, defaultCategories);
                 const unsubUnit = getMaster('units', setUnits, defaultUnits);
                 const unsubTag = getMaster('tags_master', setTagsMaster, defaultTags);
-                const unsubVendor = getMaster('vendors', setVendors, defaultVendors); 
-
+                const unsubVendor = getMaster('vendors', setVendors, defaultVendors);
                 return () => { unsubItems(); unsubCat(); unsubUnit(); unsubTag(); unsubVendor(); };
             }, [isLoggedIn, groupId]);
 
@@ -143,32 +158,21 @@
                 if (filterTag) filtered = filtered.filter(item => item.selectedTags && item.selectedTags.includes(filterTag));
                 if (searchQuery) {
                     const q = searchQuery.toLowerCase();
-                    filtered = filtered.filter(item => 
-                        (item.name && item.name.toLowerCase().includes(q)) || 
-                        (item.barcode && item.barcode.includes(q)) ||
-                        (item.itemCode && item.itemCode.toLowerCase().includes(q)) 
+                    filtered = filtered.filter(item =>
+                        (item.name && item.name.toLowerCase().includes(q)) || (item.barcode && item.barcode.includes(q)) || (item.itemCode && item.itemCode.toLowerCase().includes(q))
                     );
                 }
-
                 return filtered.sort((a, b) => {
                     if (sortBy === 'category') {
-                        const idxA = categories.indexOf(a.category);
-                        const idxB = categories.indexOf(b.category);
-                        const orderA = idxA === -1 ? 999 : idxA;
-                        const orderB = idxB === -1 ? 999 : idxB;
-                        if (orderA !== orderB) return orderA - orderB;
+                        const idxA = categories.indexOf(a.category); const idxB = categories.indexOf(b.category);
+                        if (idxA !== idxB) return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB);
                     } else if (sortBy === 'tag') {
                         const idxA = (a.selectedTags && a.selectedTags.length > 0) ? tagsMaster.indexOf(a.selectedTags[0]) : 999;
                         const idxB = (b.selectedTags && b.selectedTags.length > 0) ? tagsMaster.indexOf(b.selectedTags[0]) : 999;
-                        const orderA = idxA === -1 ? 999 : idxA;
-                        const orderB = idxB === -1 ? 999 : idxB;
-                        if (orderA !== orderB) return orderA - orderB;
-                    } else if (sortBy === 'vendor') { 
-                        const idxA = vendors.indexOf(a.vendor);
-                        const idxB = vendors.indexOf(b.vendor);
-                        const orderA = idxA === -1 ? 999 : idxA; 
-                        const orderB = idxB === -1 ? 999 : idxB;
-                        if (orderA !== orderB) return orderA - orderB;
+                        if (idxA !== idxB) return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB);
+                    } else if (sortBy === 'vendor') {
+                        const idxA = vendors.indexOf(a.vendor); const idxB = vendors.indexOf(b.vendor);
+                        if (idxA !== idxB) return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB);
                     }
                     return (a.name || '').localeCompare(b.name || '');
                 });
@@ -180,451 +184,209 @@
                 if (id) { setGroupId(id); localStorage.setItem('smartstocker_group', id); setIsLoggedIn(true); }
             };
 
-            const openAddModal = () => {
-                setFormData({ 
-                    name: '', category: categories[0] || '', unit: units[0] || '', 
-                    currentStock: 0, orderThreshold: 0, 
-                    barcode: '', selectedTags: [], vendor: '', itemCode: '' 
-                });
-                setItemModal({ isOpen: true, mode: 'add', itemId: null });
-            };
-
-            const openEditModal = (item) => {
-                const savedThreshold = item.orderThreshold !== undefined ? item.orderThreshold : (item.minStock !== undefined ? item.minStock : 0);
-                setFormData({ 
-                    ...item, 
-                    selectedTags: item.selectedTags || [], 
-                    barcode: item.barcode || '',
-                    vendor: item.vendor || '',
-                    itemCode: item.itemCode || '',
-                    orderThreshold: savedThreshold
-                });
-                setItemModal({ isOpen: true, mode: 'edit', itemId: item.id });
-            };
-
-            const handleFormSubmit = (e) => {
-                e.preventDefault();
-                if (!formData.name || !formData.category || !formData.unit) return;
-                
-                const payload = { 
-                    ...formData, 
-                    currentStock: Number(formData.currentStock), 
-                    orderThreshold: Number(formData.orderThreshold) 
-                };
-
-                if (itemModal.mode === 'add') db.collection(`groups/${groupId}/items`).add(payload);
-                else db.collection(`groups/${groupId}/items`).doc(itemModal.itemId).update(payload);
-                
-                setItemModal({ isOpen: false, mode: 'add', itemId: null });
-            };
-
             const updateStock = (id, change, current) => {
-                const newVal = Math.max(0, current + change);
-                db.collection(`groups/${groupId}/items`).doc(id).update({ currentStock: newVal });
+                db.collection(`groups/${groupId}/items`).doc(id).update({ currentStock: Math.max(0, current + change) });
             };
 
             const toggleTag = (tag) => {
-                setFormData(prev => ({
-                    ...prev, 
-                    selectedTags: prev.selectedTags?.includes(tag) ? prev.selectedTags.filter(t => t !== tag) : [...(prev.selectedTags || []), tag]
-                }));
+                setFormData(prev => ({ ...prev, selectedTags: prev.selectedTags?.includes(tag) ? prev.selectedTags.filter(t => t !== tag) : [...(prev.selectedTags || []), tag] }));
             };
 
             const moveItemInArray = (list, index, direction, docName) => {
                 const newList = [...list];
-                if (direction === 'up' && index > 0) {
-                    [newList[index - 1], newList[index]] = [newList[index], newList[index - 1]];
-                } else if (direction === 'down' && index < list.length - 1) {
-                    [newList[index], newList[index + 1]] = [newList[index + 1], newList[index]];
-                } else return;
-                
+                if (direction === 'up' && index > 0) [newList[index - 1], newList[index]] = [newList[index], newList[index - 1]];
+                else if (direction === 'down' && index < list.length - 1) [newList[index], newList[index + 1]] = [newList[index + 1], newList[index]];
+                else return;
                 db.collection(`groups/${groupId}/settings`).doc(docName).set({ list: newList }, { merge: true });
             };
 
             const handleMasterAdd = (list, docName) => {
-                const t = newItemInput.trim();
-                if(!t) return;
-                const updatedList = [...new Set([...list, t])];
-                db.collection(`groups/${groupId}/settings`).doc(docName).set({ list: updatedList }, { merge: true }).then(() => setNewItemInput(''));
+                const t = newItemInput.trim(); if (!t) return;
+                db.collection(`groups/${groupId}/settings`).doc(docName).set({ list: [...new Set([...list, t])] }, { merge: true }).then(() => setNewItemInput(''));
             };
 
             const handleMasterRemove = (list, item, docName) => {
-                if(window.confirm(`「${item}」を削除しますか？`)) {
-                    db.collection(`groups/${groupId}/settings`).doc(docName).set({ list: list.filter(x => x !== item) }, { merge: true });
-                }
+                if (window.confirm(`「${item}」を削除しますか？`)) db.collection(`groups/${groupId}/settings`).doc(docName).set({ list: list.filter(x => x !== item) }, { merge: true });
             };
 
-            const handleScan = (text) => {
-                if (scanMode === 'search') {
-                    setSearchQuery(text);
-                } else if (scanMode === 'register') {
-                    setFormData(prev => ({ ...prev, barcode: text }));
-                }
-                setScanMode(null);
-            };
-
-            // ★ Excelエクスポート機能
             const handleExport = () => {
-                if (items.length === 0) {
-                    alert('出力するデータがありません。');
-                    return;
-                }
+                if (items.length === 0) { alert('出力するデータがありません。'); return; }
                 const exportData = items.map(item => ({
-                    'ID': item.id,
-                    '品名': item.name,
-                    '分野': item.category,
-                    '単位': item.unit,
-                    '現在の在庫数': item.currentStock,
-                    '発注アラート': item.orderThreshold !== undefined ? item.orderThreshold : (item.minStock || 0),
-                    '業者名': item.vendor || '',
-                    '商品コード': item.itemCode || '',
-                    'バーコード': item.barcode || '',
-                    'タグ': item.selectedTags ? item.selectedTags.join(', ') : ''
+                    'ID': item.id, '品名': item.name, '分野': item.category, '単位': item.unit, '現在の在庫数': item.currentStock,
+                    '発注アラート': item.orderThreshold !== undefined ? item.orderThreshold : (item.minStock || 0), '業者名': item.vendor || '', '商品コード': item.itemCode || '', 'バーコード': item.barcode || '', 'タグ': item.selectedTags ? item.selectedTags.join(', ') : ''
                 }));
-
                 const ws = XLSX.utils.json_to_sheet(exportData);
-                // セルの幅を見やすく調整
                 ws['!cols'] = [{ wch: 22 }, { wch: 25 }, { wch: 15 }, { wch: 8 }, { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 20 }];
-                
-                const wb = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(wb, ws, "在庫データ");
-                XLSX.writeFile(wb, `SmartStocker_在庫データ_${new Date().toISOString().slice(0,10)}.xlsx`);
+                const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "在庫データ");
+                XLSX.writeFile(wb, `SmartStocker_在庫データ_${new Date().toISOString().slice(0, 10)}.xlsx`);
             };
 
-            // ★ Excelインポート（上書き・新規登録）機能
-            const handleImport = async (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-                
+            const handleImport = async (ev) => {
+                const file = ev.target.files[0]; if (!file) return;
                 setIsProcessing(true);
                 const reader = new FileReader();
                 reader.onload = async (evt) => {
                     try {
                         const data = new Uint8Array(evt.target.result);
                         const wb = XLSX.read(data, { type: 'array' });
-                        const wsname = wb.SheetNames[0];
-                        const ws = wb.Sheets[wsname];
-                        const rows = XLSX.utils.sheet_to_json(ws);
-                        
-                        if (rows.length === 0) {
-                            alert("データが見つかりません。");
-                            setIsProcessing(false);
-                            return;
-                        }
-                        
-                        let countNew = 0;
-                        let countUpdate = 0;
-
-                        // Firestoreへの書き込みループ
+                        const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+                        let countNew = 0, countUpdate = 0;
                         for (const row of rows) {
-                            if (!row['品名']) continue; // 品名が空の場合はスキップ
-                            
+                            if (!row['品名']) continue;
                             const payload = {
-                                name: String(row['品名'] || '').trim(),
-                                category: String(row['分野'] || categories[0]),
-                                unit: String(row['単位'] || units[0]),
-                                currentStock: Number(row['現在の在庫数']) || 0,
-                                orderThreshold: Number(row['発注アラート']) || 0,
-                                vendor: row['業者名'] ? String(row['業者名']).trim() : '',
-                                itemCode: row['商品コード'] ? String(row['商品コード']).trim() : '',
-                                barcode: row['バーコード'] ? String(row['バーコード']).trim() : '',
-                                selectedTags: row['タグ'] ? String(row['タグ']).split(',').map(t=>t.trim()).filter(t=>t) : []
+                                name: String(row['品名'] || '').trim(), category: String(row['分野'] || categories[0]), unit: String(row['単位'] || units[0]),
+                                currentStock: Number(row['現在の在庫数']) || 0, orderThreshold: Number(row['発注アラート']) || 0, vendor: row['業者名'] ? String(row['業者名']).trim() : '',
+                                itemCode: row['商品コード'] ? String(row['商品コード']).trim() : '', barcode: row['バーコード'] ? String(row['バーコード']).trim() : '',
+                                selectedTags: row['タグ'] ? String(row['タグ']).split(',').map(t => t.trim()).filter(t => t) : []
                             };
-
-                            const docId = row['ID'];
-                            if (docId) {
-                                // IDがある場合は「上書き更新」
-                                await db.collection(`groups/${groupId}/items`).doc(String(docId).trim()).set(payload, { merge: true });
-                                countUpdate++;
-                            } else {
-                                // IDがない場合は「新規登録」
-                                await db.collection(`groups/${groupId}/items`).add(payload);
-                                countNew++;
-                            }
+                            if (row['ID']) { await db.collection(`groups/${groupId}/items`).doc(String(row['ID']).trim()).set(payload, { merge: true }); countUpdate++; }
+                            else { await db.collection(`groups/${groupId}/items`).add(payload); countNew++; }
                         }
-                        alert(`インポートが完了しました！\n✅ 新規登録: ${countNew}件\n🔄 更新(上書き): ${countUpdate}件`);
-                    } catch (err) {
-                        console.error(err);
-                        alert("エラーが発生しました。Excelファイルの形式が正しいか確認してください。");
-                    }
-                    setIsProcessing(false);
-                    e.target.value = ''; // 選択クリア
+                        alert(`インポート完了！\n新規: ${countNew}件\n更新: ${countUpdate}件`);
+                    } catch (err) { alert("形式を確認してください。"); }
+                    setIsProcessing(false); ev.target.value = '';
                 };
                 reader.readAsArrayBuffer(file);
             };
 
+            const renderMasterModal = (title, list, docName, closeFunc) => (
+                e('div', { className: "fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50" },
+                    e('div', { className: "bg-white rounded-2xl shadow-xl w-full max-w-sm p-4 sm:p-6" },
+                        e('h3', { className: "font-black text-base text-slate-800 mb-4" }, title + "のカスタマイズ"),
+                        e('div', { className: "flex gap-2 mb-4" },
+                            e('input', { value: newItemInput, onChange: em => setNewItemInput(em.target.value), placeholder: "新しい項目", className: "flex-1 p-2 border-2 border-slate-200 rounded-lg font-bold text-sm outline-none" }),
+                            e('button', { onClick: () => handleMasterAdd(list, docName), className: "bg-blue-600 text-white px-3 text-sm rounded-lg font-bold" }, "追加")
+                        ),
+                        e('ul', { className: "space-y-2 max-h-60 overflow-y-auto mb-4 pr-1" },
+                            list.map((item, idx) => e('li', { key: item, className: "flex justify-between items-center bg-slate-50 p-2 rounded-lg border border-slate-200 text-sm" },
+                                e('span', { className: "font-bold text-slate-700 truncate mr-2" }, item),
+                                e('div', { className: "flex gap-1" },
+                                    e('button', { onClick: () => moveItemInArray(list, idx, 'up', docName), className: "p-1 bg-white border border-slate-300 rounded" }, "🔼"),
+                                    e('button', { onClick: () => moveItemInArray(list, idx, 'down', docName), className: "p-1 bg-white border border-slate-300 rounded" }, "🔽"),
+                                    e('button', { onClick: () => handleMasterRemove(list, item, docName), className: "p-1 bg-red-50 text-red-500 border border-red-200 rounded font-bold ml-1" }, "✕")
+                                )
+                            ))
+                        ),
+                        e('button', { onClick: () => { closeFunc(false); setNewItemInput(''); }, className: "w-full p-2 bg-slate-200 text-slate-700 rounded-xl font-bold text-sm" }, "閉じる")
+                    )
+                )
+            );
+
             if (!isLoggedIn) {
-                return (
-                    <div className="flex items-center justify-center h-screen p-4">
-                        <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-xl w-full max-w-sm border border-blue-100">
-                            <h1 className="text-2xl sm:text-3xl font-black text-blue-600 mb-2 tracking-tight">
-                                SmartStocker <span className="text-lg text-blue-400">1.6</span>
-                            </h1>
-                            <p className="text-slate-500 mb-6 font-medium text-sm">職場IDを入力して在庫管理を開く</p>
-                            <form onSubmit={handleLogin} className="space-y-4">
-                                <input name="groupInput" type="text" placeholder="例: office-01" className="w-full p-3 border-2 border-slate-200 rounded-xl font-bold focus:border-blue-500 outline-none" required />
-                                <button type="submit" className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700">入室する</button>
-                            </form>
-                        </div>
-                    </div>
+                return e('div', { className: "flex items-center justify-center h-screen p-4" },
+                    e('div', { className: "bg-white p-6 sm:p-8 rounded-2xl shadow-xl w-full max-w-sm border border-blue-100" },
+                        e('h1', { className: "text-2xl sm:text-3xl font-black text-blue-600 mb-2 tracking-tight" }, "SmartStocker ", e('span', { className: "text-lg text-blue-400" }, "1.6")),
+                        e('p', { className: "text-slate-500 mb-6 font-medium text-sm" }, "職場IDを入力して在庫管理を開く"),
+                        e('form', { onSubmit: handleLogin, className: "space-y-4" },
+                            e('input', { name: "groupInput", type: "text", placeholder: "例: office-01", className: "w-full p-3 border-2 border-slate-200 rounded-xl font-bold focus:border-blue-500 outline-none", required: true }),
+                            e('button', { type: "submit", className: "w-full bg-blue-600 text-white py-3 rounded-xl font-bold" }, "入室する")
+                        )
+                    )
                 );
             }
 
-            const renderMasterModal = (title, list, docName, closeFunc) => (
-                <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-4 sm:p-6">
-                        <h3 className="font-black text-base text-slate-800 mb-4">{title}のカスタマイズ</h3>
-                        <div className="flex gap-2 mb-4">
-                            <input value={newItemInput} onChange={e => setNewItemInput(e.target.value)} placeholder="新しい項目" className="flex-1 p-2 border-2 border-slate-200 rounded-lg font-bold text-sm outline-none" />
-                            <button onClick={() => handleMasterAdd(list, docName)} className="bg-blue-600 text-white px-3 text-sm rounded-lg font-bold">追加</button>
-                        </div>
-                        <ul className="space-y-2 max-h-60 overflow-y-auto mb-4 pr-1">
-                            {list.map((item, idx) => (
-                                <li key={item} className="flex justify-between items-center bg-slate-50 p-2 rounded-lg border border-slate-200 text-sm">
-                                    <span className="font-bold text-slate-700 truncate mr-2">{item}</span>
-                                    <div className="flex gap-1">
-                                        <button onClick={() => moveItemInArray(list, idx, 'up', docName)} className="p-1 bg-white border border-slate-300 rounded text-slate-500 hover:bg-slate-100">🔼</button>
-                                        <button onClick={() => moveItemInArray(list, idx, 'down', docName)} className="p-1 bg-white border border-slate-300 rounded text-slate-500 hover:bg-slate-100">🔽</button>
-                                        <button onClick={() => handleMasterRemove(list, item, docName)} className="p-1 bg-red-50 text-red-500 border border-red-200 rounded font-bold ml-1 hover:bg-red-100">✕</button>
-                                    </div>
-                                </li>
-                            ))}
-                        </ul>
-                        <button onClick={() => { closeFunc(false); setNewItemInput(''); }} className="w-full p-2 bg-slate-200 text-slate-700 rounded-xl font-bold text-sm">閉じる</button>
-                    </div>
-                </div>
-            );
-
-            return (
-                <div className="max-w-4xl mx-auto p-2 sm:p-6 pb-24">
-                    {scanMode && <BarcodeScanner onScan={handleScan} onClose={() => setScanMode(null)} />}
-
-                    {/* ★ ヘッダー周りを改修: ボタンが増えてもスマホで崩れないように折り返し対応 */}
-                    <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 bg-white p-3 sm:p-4 rounded-xl shadow-sm border border-slate-100 gap-3">
-                        <div>
-                            <h1 className="text-xl sm:text-2xl font-black text-blue-700 tracking-tight leading-none flex items-baseline gap-1">
-                                SmartStocker <span className="text-sm font-bold text-blue-400">1.6</span>
-                            </h1>
-                            <p className="text-[10px] sm:text-xs font-bold text-blue-400 mt-1">ID: {groupId}</p>
-                        </div>
-                        
-                        {/* ★ 各種アクションボタン群 */}
-                        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 w-full sm:w-auto justify-end">
-                            <button onClick={handleExport} disabled={isProcessing} className="text-[10px] sm:text-xs font-bold bg-green-600 text-white px-2.5 py-1.5 rounded-lg hover:bg-green-700 shadow-sm transition flex items-center gap-1">
-                                ⬇️ 出力
-                            </button>
-                            <label className={`text-[10px] sm:text-xs font-bold bg-green-600 text-white px-2.5 py-1.5 rounded-lg hover:bg-green-700 shadow-sm transition flex items-center gap-1 cursor-pointer m-0 ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                                ⬆️ 取込
-                                <input type="file" accept=".xlsx, .xls, .csv" onChange={handleImport} className="hidden" disabled={isProcessing} />
-                            </label>
-                            
-                            <span className="w-px h-6 bg-slate-200 mx-1 hidden sm:block"></span>
-
-                            <button onClick={openAddModal} disabled={isProcessing} className="text-[10px] sm:text-xs font-bold bg-blue-600 text-white px-2.5 py-1.5 rounded-lg hover:bg-blue-700 shadow-sm transition">
-                                ＋ 新規
-                            </button>
-                            <button onClick={() => {localStorage.removeItem('smartstocker_group'); setIsLoggedIn(false);}} className="text-[10px] sm:text-xs font-bold text-slate-500 px-2.5 py-1.5 bg-slate-100 rounded-lg border border-slate-200 hover:bg-slate-200 transition">
-                                退出
-                            </button>
-                        </div>
-                    </header>
-
-                    <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-100 mb-4 space-y-2">
-                        <div className="flex flex-col sm:flex-row gap-2">
-                            <div className="flex-1 relative flex">
-                                <span className="absolute left-3 top-2.5 text-slate-400 text-sm">🔍</span>
-                                <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="品名・バーコード・コード" className="w-full pl-8 p-2 border-2 border-slate-200 rounded-l-xl text-sm font-bold outline-none focus:border-blue-500" />
-                                <button onClick={() => setScanMode('search')} className="bg-blue-600 text-white px-3 rounded-r-xl font-bold flex items-center gap-1 hover:bg-blue-700 transition">
-                                    📷 <span className="hidden sm:inline text-xs">スキャン</span>
-                                </button>
-                            </div>
-                            <label className="flex items-center justify-center cursor-pointer text-xs font-bold text-red-600 bg-red-50 px-3 py-2 rounded-xl border border-red-200 hover:bg-red-100 transition">
-                                <input type="checkbox" checked={filterLowStock} onChange={(e) => setFilterLowStock(e.target.checked)} className="mr-2 w-4 h-4 accent-red-500" />
-                                ⚠️ 要発注のみ表示
-                            </label>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                            <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="flex-1 min-w-[90px] p-2 border-2 border-slate-200 rounded-lg text-xs font-bold bg-slate-50 outline-none">
-                                <option value="">全分野</option>
-                                {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
-                            <select value={filterTag} onChange={(e) => setFilterTag(e.target.value)} className="flex-1 min-w-[90px] p-2 border-2 border-slate-200 rounded-lg text-xs font-bold bg-slate-50 outline-none">
-                                <option value="">全タグ</option>
-                                {tagsMaster.map(t => <option key={t} value={t}>{t}</option>)}
-                            </select>
-                            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="flex-1 min-w-[110px] p-2 border-2 border-blue-200 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 outline-none">
-                                <option value="category">分野順</option>
-                                <option value="tag">タグ順</option>
-                                <option value="vendor">業者順</option> 
-                                <option value="name">名前順</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
-                        {displayedItems.length === 0 && (
-                            <div className="col-span-full text-center py-10 text-slate-400 font-bold text-sm">表示するアイテムがありません。</div>
-                        )}
-                        {displayedItems.map(item => {
-                            const threshold = item.orderThreshold !== undefined ? item.orderThreshold : (item.minStock !== undefined ? item.minStock : 0);
-                            const isLowStock = item.currentStock <= threshold;
-                            
-                            return (
-                                <div key={item.id} className={`p-3 sm:p-4 rounded-xl border-2 flex flex-col justify-between ${isLowStock ? 'bg-red-50/50 border-red-200 shadow-sm' : 'bg-white border-slate-100'}`}>
-                                    <div>
-                                        <div className="flex flex-wrap items-center gap-1 mb-1.5">
-                                            {isLowStock && <span className="bg-red-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded animate-pulse">要発注</span>}
-                                            <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded">{item.category}</span>
-                                            {item.selectedTags && item.selectedTags.map(tag => (
-                                                <span key={tag} className="bg-slate-100 text-slate-600 border border-slate-200 text-[10px] font-bold px-1.5 py-0.5 rounded-full">🏷️{tag}</span>
-                                            ))}
-                                        </div>
-                                        <h3 className="text-sm sm:text-base font-black text-slate-800 leading-tight pr-8 relative">
-                                            {item.name}
-                                            <button onClick={() => openEditModal(item)} className="absolute right-0 top-0 text-slate-300 hover:text-blue-500 text-sm">✏️</button>
-                                        </h3>
-                                        
-                                        {(item.vendor || item.itemCode) && (
-                                            <div className="mt-2 text-xs sm:text-sm bg-amber-50 p-1.5 sm:p-2 rounded-lg border border-amber-200 flex items-center flex-wrap gap-2 sm:gap-3">
-                                                {item.vendor && <span className="font-bold text-amber-900">🏢 {item.vendor}</span>}
-                                                {item.itemCode && <span className="font-bold text-slate-800">コード: {item.itemCode}</span>}
-                                            </div>
-                                        )}
-                                        {item.barcode && <p className="text-[10px] text-slate-400 mt-2 font-mono break-all">🔢 {item.barcode}</p>}
-                                    </div>
-                                    
-                                    <div className="flex items-center justify-between mt-3 bg-white p-2 rounded-lg border border-slate-100 shadow-sm">
-                                        <div className="text-center w-1/3">
-                                            <p className="text-[10px] font-bold text-slate-400">現在庫</p>
-                                            <p className={`text-xl sm:text-2xl font-black ${isLowStock ? 'text-red-600' : 'text-slate-700'}`}>{item.currentStock}<span className="text-xs ml-0.5 font-bold text-slate-400">{item.unit}</span></p>
-                                        </div>
-                                        <div className="flex gap-1 w-2/3 justify-end">
-                                            <button onClick={() => updateStock(item.id, -1, item.currentStock)} className="w-10 h-10 sm:w-12 sm:h-12 bg-slate-50 border-2 border-slate-200 rounded-xl text-xl font-black text-slate-600 hover:bg-slate-100 active:scale-95 transition flex items-center justify-center">－</button>
-                                            <button onClick={() => updateStock(item.id, 1, item.currentStock)} className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-500 border-2 border-blue-600 rounded-xl text-xl font-black text-white hover:bg-blue-600 active:scale-95 transition flex items-center justify-center shadow-sm">＋</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-
-                    <button onClick={openAddModal} className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 w-14 h-14 sm:w-16 sm:h-16 bg-blue-600 text-white rounded-full shadow-lg shadow-blue-300 flex items-center justify-center text-3xl font-bold hover:bg-blue-700 active:scale-95 transition z-30">
-                        +
-                    </button>
-
-                    {itemModal.isOpen && (
-                        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 z-40 overflow-y-auto">
-                            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-4 sm:p-6 relative my-4">
-                                <h2 className="text-lg font-black text-slate-800 mb-4 pb-2 border-b">
-                                    {itemModal.mode === 'add' ? '✨ 新しい備品を登録' : '✏️ 備品データを編集'}
-                                </h2>
-                                
-                                <form onSubmit={handleFormSubmit} className="space-y-3">
-                                    <div>
-                                        <label className="text-xs font-bold text-slate-500 block mb-1">品名 <span className="text-red-500">*</span></label>
-                                        <input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full p-2.5 border-2 border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-blue-500" required />
-                                    </div>
-
-                                    <div>
-                                        <label className="text-xs font-bold text-slate-500 block mb-1">バーコード (JANコード)</label>
-                                        <div className="flex gap-2">
-                                            <input value={formData.barcode} onChange={e => setFormData({...formData, barcode: e.target.value})} placeholder="数字を入力するかスキャン" className="flex-1 p-2.5 border-2 border-slate-200 rounded-xl text-sm font-bold font-mono outline-none focus:border-blue-500" />
-                                            <button type="button" onClick={() => setScanMode('register')} className="bg-blue-600 text-white px-3 rounded-xl font-bold text-sm whitespace-nowrap">📷 読取</button>
-                                        </div>
-                                    </div>
-                                    
-                                    <div className="flex gap-2">
-                                        <div className="flex-1">
-                                            <label className="text-xs font-bold text-slate-500 block mb-1">分野 <span className="text-red-500">*</span></label>
-                                            <div className="flex gap-1">
-                                                <select value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full p-2.5 border-2 border-slate-200 rounded-xl text-sm font-bold bg-white" required>
-                                                    {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                                                </select>
-                                                <button type="button" onClick={() => setShowCategoryModal(true)} className="p-2 bg-slate-100 text-slate-600 rounded-xl font-bold">⚙️</button>
-                                            </div>
-                                        </div>
-                                        <div className="w-1/3">
-                                            <label className="text-xs font-bold text-slate-500 block mb-1">単位 <span className="text-red-500">*</span></label>
-                                            <div className="flex gap-1">
-                                                <select value={formData.unit} onChange={e => setFormData({...formData, unit: e.target.value})} className="w-full p-2.5 border-2 border-slate-200 rounded-xl text-sm font-bold bg-white" required>
-                                                    {units.map(u => <option key={u} value={u}>{u}</option>)}
-                                                </select>
-                                                <button type="button" onClick={() => setShowUnitModal(true)} className="p-2 bg-slate-100 text-slate-600 rounded-xl font-bold">⚙️</button>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="p-3 border-2 border-slate-100 rounded-xl bg-slate-50">
-                                        <h4 className="text-xs font-bold text-slate-500 mb-2">🛒 発注情報 (任意)</h4>
-                                        <div className="flex flex-col sm:flex-row gap-2">
-                                            <div className="flex-1">
-                                                <label className="text-[10px] font-bold text-slate-500 block mb-1">業者名</label>
-                                                <div className="flex gap-1">
-                                                    <select value={formData.vendor} onChange={e => setFormData({...formData, vendor: e.target.value})} className="w-full p-2.5 border-2 border-slate-200 rounded-xl text-sm font-bold bg-white outline-none">
-                                                        <option value="">指定なし</option>
-                                                        {vendors.map(v => <option key={v} value={v}>{v}</option>)}
-                                                    </select>
-                                                    <button type="button" onClick={() => setShowVendorModal(true)} className="p-2 bg-slate-200 text-slate-600 rounded-xl font-bold">⚙️</button>
-                                                </div>
-                                            </div>
-                                            <div className="flex-1">
-                                                <label className="text-[10px] font-bold text-slate-500 block mb-1">注文番号・商品コード</label>
-                                                <input value={formData.itemCode} onChange={e => setFormData({...formData, itemCode: e.target.value})} className="w-full p-2.5 border-2 border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-blue-500" placeholder="例: 123-456" />
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="p-3 border-2 border-slate-100 rounded-xl bg-white">
-                                        <div className="flex justify-between items-center mb-2">
-                                            <label className="text-xs font-bold text-slate-500">🏷️ タグ</label>
-                                            <button type="button" onClick={() => setShowTagModal(true)} className="text-[10px] font-bold text-blue-600 bg-white px-2 py-1 rounded border border-blue-200">⚙️ 編集</button>
-                                        </div>
-                                        <div className="flex flex-wrap gap-1.5">
-                                            {tagsMaster.map(tag => {
-                                                const isSelected = formData.selectedTags && formData.selectedTags.includes(tag);
-                                                return (
-                                                    <button key={tag} type="button" onClick={() => toggleTag(tag)} className={`px-2 py-1 rounded-full text-xs font-bold border transition ${isSelected ? 'bg-blue-500 text-white border-blue-600' : 'bg-white text-slate-500 border-slate-300'}`}>
-                                                        {isSelected ? '✓ ' : ''}{tag}
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <div className="bg-blue-50 p-2 sm:p-3 rounded-xl border border-blue-100">
-                                            <label className="text-[10px] font-bold text-blue-600 block mb-1">現在の在庫数</label>
-                                            <input type="number" min="0" value={formData.currentStock} onChange={e => setFormData({...formData, currentStock: e.target.value})} className="w-full p-2 border-2 border-blue-200 rounded-lg text-lg font-black outline-none" required />
-                                        </div>
-                                        <div className="bg-red-50 p-2 sm:p-3 rounded-xl border border-red-100">
-                                            <label className="text-[10px] font-bold text-red-600 block mb-1">発注アラートを出す数</label>
-                                            <input type="number" min="0" value={formData.orderThreshold} onChange={e => setFormData({...formData, orderThreshold: e.target.value})} className="w-full p-2 border-2 border-red-200 rounded-lg text-lg font-black outline-none" required />
-                                        </div>
-                                    </div>
-
-                                    <div className="flex gap-2 pt-3 border-t mt-4">
-                                        <button type="button" onClick={() => setItemModal({ isOpen: false, mode: 'add', itemId: null })} className="flex-1 p-3 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-200">キャンセル</button>
-                                        {itemModal.mode === 'edit' && (
-                                            <button type="button" onClick={() => { if(window.confirm('削除しますか？')) { db.collection(`groups/${groupId}/items`).doc(itemModal.itemId).delete(); setItemModal({ isOpen: false }); } }} className="p-3 bg-red-100 text-red-600 rounded-xl font-bold text-sm">削除</button>
-                                        )}
-                                        <button type="submit" className="flex-1 p-3 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700">保存する</button>
-                                    </div>
-                                </form>
-                            </div>
-                        </div>
-                    )}
-
-                    {showCategoryModal && renderMasterModal("分野", categories, "categories", setShowCategoryModal)}
-                    {showUnitModal && renderMasterModal("単位", units, "units", setShowUnitModal)}
-                    {showTagModal && renderMasterModal("タグ", tagsMaster, "tags_master", setShowTagModal)}
-                    {showVendorModal && renderMasterModal("業者名", vendors, "vendors", setShowVendorModal)} 
-
-                </div>
+            return e('div', { className: "max-w-4xl mx-auto p-2 sm:p-6 pb-24" },
+                scanMode && e(BarcodeScanner, { onScan: (txt) => { if (scanMode === 'search') setSearchQuery(txt); else setFormData(p => ({ ...p, barcode: txt })); setScanMode(null); }, onClose: () => setScanMode(null) }),
+                e('header', { className: "flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 bg-white p-3 sm:p-4 rounded-xl shadow-sm border border-slate-100 gap-3" },
+                    e('div', null,
+                        e('h1', { className: "text-xl sm:text-2xl font-black text-blue-700 tracking-tight leading-none flex items-baseline gap-1" }, "SmartStocker ", e('span', { className: "text-sm font-bold text-blue-400" }, "1.6")),
+                        e('p', { className: "text-[10px] sm:text-xs font-bold text-blue-400 mt-1" }, "ID: " + groupId)
+                    ),
+                    e('div', { className: "flex flex-wrap items-center gap-1.5 sm:gap-2 w-full sm:w-auto justify-end" },
+                        e('button', { onClick: handleExport, disabled: isProcessing, className: "text-[10px] sm:text-xs font-bold bg-green-600 text-white px-2.5 py-1.5 rounded-lg" }, "⬇️ 出力"),
+                        e('label', { className: "text-[10px] sm:text-xs font-bold bg-green-600 text-white px-2.5 py-1.5 rounded-lg cursor-pointer" }, "⬆️ 取込", e('input', { type: "file", accept: ".xlsx, .xls, .csv", onChange: handleImport, className: "hidden", disabled: isProcessing })),
+                        e('span', { className: "w-px h-6 bg-slate-200 mx-1 hidden sm:block" }),
+                        e('button', { onClick: () => { setFormData({ name: '', category: categories[0] || '', unit: units[0] || '', currentStock: 0, orderThreshold: 0, barcode: '', selectedTags: [], vendor: '', itemCode: '' }); setItemModal({ isOpen: true, mode: 'add', itemId: null }); }, disabled: isProcessing, className: "text-[10px] sm:text-xs font-bold bg-blue-600 text-white px-2.5 py-1.5 rounded-lg" }, "＋ 新規"),
+                        e('button', { onClick: () => { localStorage.removeItem('smartstocker_group'); setIsLoggedIn(false); }, className: "text-[10px] sm:text-xs font-bold text-slate-500 px-2.5 py-1.5 bg-slate-100 rounded-lg border border-slate-200" }, "退出")
+                    )
+                ),
+                errorMsg && e('div', { className: "mb-4 p-3 bg-red-100 text-red-700 text-sm font-bold rounded-xl" }, errorMsg),
+                e('div', { className: "bg-white p-3 rounded-xl shadow-sm border border-slate-100 mb-4 space-y-2" },
+                    e('div', { className: "flex flex-col sm:flex-row gap-2" },
+                        e('div', { className: "flex-1 relative flex" },
+                            e('span', { className: "absolute left-3 top-2.5 text-slate-400 text-sm" }, "🔍"),
+                            e('input', { value: searchQuery, onChange: am => setSearchQuery(am.target.value), placeholder: "品名・バーコード・コード", className: "w-full pl-8 p-2 border-2 border-slate-200 rounded-l-xl text-sm font-bold outline-none" }),
+                            e('button', { onClick: () => setScanMode('search'), className: "bg-blue-600 text-white px-3 rounded-r-xl font-bold flex items-center gap-1" }, "📷")
+                        ),
+                        e('label', { className: "flex items-center justify-center cursor-pointer text-xs font-bold text-red-600 bg-red-50 px-3 py-2 rounded-xl border border-red-200" },
+                            e('input', { type: "checkbox", checked: filterLowStock, onChange: am => setFilterLowStock(am.target.checked), className: "mr-2 w-4 h-4" }), "⚠️ 要発注のみ表示"
+                        )
+                    ),
+                    e('div', { className: "flex flex-wrap gap-2" },
+                        e('select', { value: filterCategory, onChange: am => setFilterCategory(am.target.value), className: "flex-1 min-w-[90px] p-2 border-2 border-slate-200 rounded-lg text-xs font-bold bg-slate-50" }, e('option', { value: "" }, "全分野"), categories.map(c => e('option', { key: c, value: c }, c))),
+                        e('select', { value: filterTag, onChange: am => setFilterTag(am.target.value), className: "flex-1 min-w-[90px] p-2 border-2 border-slate-200 rounded-lg text-xs font-bold bg-slate-50" }, e('option', { value: "" }, "全タグ"), tagsMaster.map(t => e('option', { key: t, value: t }, t))),
+                        e('select', { value: sortBy, onChange: am => setSortBy(am.target.value), className: "flex-1 min-w-[110px] p-2 border-2 border-blue-200 rounded-lg text-xs font-bold bg-blue-50 text-blue-700" }, e('option', { value: "category" }, "分野順"), e('option', { value: "tag" }, "タグ順"), e('option', { value: "vendor" }, "業者順"), e('option', { value: "name" }, "名前順"))
+                    )
+                ),
+                e('div', { className: "grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4" },
+                    displayedItems.length === 0 && e('div', { className: "col-span-full text-center py-10 text-slate-400 font-bold text-sm" }, "表示するアイテムがありません。"),
+                    displayedItems.map(item => {
+                        const th = item.orderThreshold !== undefined ? item.orderThreshold : (item.minStock !== undefined ? item.minStock : 0);
+                        const isLow = item.currentStock <= th;
+                        return e('div', { key: item.id, className: `p-3 sm:p-4 rounded-xl border-2 flex flex-col justify-between ${isLow ? 'bg-red-50/50 border-red-200' : 'bg-white border-slate-100'}` },
+                            e('div', null,
+                                e('div', { className: "flex flex-wrap items-center gap-1 mb-1.5" },
+                                    isLow && e('span', { className: "bg-red-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded" }, "要発注"),
+                                    e('span', { className: "bg-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded" }, item.category),
+                                    item.selectedTags && item.selectedTags.map(tag => e('span', { key: tag, className: "bg-slate-100 text-slate-600 border border-slate-200 text-[10px] font-bold px-1.5 py-0.5 rounded-full" }, "🏷️" + tag))
+                                ),
+                                e('h3', { className: "text-sm sm:text-base font-black text-slate-800 leading-tight pr-8 relative" }, item.name,
+                                    e('button', { onClick: () => { const th2 = item.orderThreshold !== undefined ? item.orderThreshold : (item.minStock !== undefined ? item.minStock : 0); setFormData({ ...item, selectedTags: item.selectedTags || [], barcode: item.barcode || '', vendor: item.vendor || '', itemCode: item.itemCode || '', orderThreshold: th2 }); setItemModal({ isOpen: true, mode: 'edit', itemId: item.id }); }, className: "absolute right-0 top-0 text-slate-300 text-sm" }, "✏️")
+                                ),
+                                (item.vendor || item.itemCode) && e('div', { className: "mt-2 text-xs sm:text-sm bg-amber-50 p-1.5 sm:p-2 rounded-lg border border-amber-200 flex items-center flex-wrap gap-2" },
+                                    item.vendor && e('span', { className: "font-bold text-amber-900" }, "🏢 " + item.vendor),
+                                    item.itemCode && e('span', { className: "font-bold text-slate-800" }, "コード: " + item.itemCode)
+                                ),
+                                item.barcode && e('p', { className: "text-[10px] text-slate-400 mt-2 font-mono break-all" }, "🔢 " + item.barcode)
+                            ),
+                            e('div', { className: "flex items-center justify-between mt-3 bg-white p-2 rounded-lg border border-slate-100" },
+                                e('div', { className: "text-center w-1/3" },
+                                    e('p', { className: "text-[10px] font-bold text-slate-400" }, "現在庫"),
+                                    e('p', { className: `text-xl sm:text-2xl font-black ${isLow ? 'text-red-600' : 'text-slate-700'}` }, item.currentStock, e('span', { className: "text-xs ml-0.5 font-bold text-slate-400" }, item.unit))
+                                ),
+                                e('div', { className: "flex gap-1 w-2/3 justify-end" },
+                                    e('button', { onClick: () => updateStock(item.id, -1, item.currentStock), className: "w-10 h-10 bg-slate-50 border-2 border-slate-200 rounded-xl font-black" }, "－"),
+                                    e('button', { onClick: () => updateStock(item.id, 1, item.currentStock), className: "w-10 h-10 bg-blue-500 border-2 border-blue-600 rounded-xl font-black text-white" }, "＋")
+                                )
+                            )
+                        );
+                    })
+                ),
+                e('button', { onClick: () => { setFormData({ name: '', category: categories[0] || '', unit: units[0] || '', currentStock: 0, orderThreshold: 0, barcode: '', selectedTags: [], vendor: '', itemCode: '' }); setItemModal({ isOpen: true, mode: 'add', itemId: null }); }, className: "fixed bottom-4 right-4 w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg text-3xl font-bold flex items-center justify-center z-30" }, "+"),
+                itemModal.isOpen && e('div', { className: "fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 z-40 overflow-y-auto" },
+                    e('div', { className: "bg-white rounded-2xl shadow-2xl w-full max-w-lg p-4 sm:p-6 relative my-4" },
+                        e('h2', { className: "text-lg font-black text-slate-800 mb-4 pb-2 border-b" }, itemModal.mode === 'add' ? '✨ 新しい備品を登録' : '✏️ 備品データを編集'),
+                        e('form', {
+                            onSubmit: (fm) => {
+                                fm.preventDefault(); if (!formData.name || !formData.category || !formData.unit) return;
+                                const pld = { ...formData, currentStock: Number(formData.currentStock), orderThreshold: Number(formData.orderThreshold) };
+                                if (itemModal.mode === 'add') db.collection(`groups/${groupId}/items`).add(pld);
+                                else db.collection(`groups/${groupId}/items`).doc(itemModal.itemId).update(pld);
+                                setItemModal({ isOpen: false, mode: 'add', itemId: null });
+                            }, className: "space-y-3"
+                        },
+                            e('div', null, e('label', { className: "text-xs font-bold text-slate-500 block mb-1" }, "品名 *"), e('input', { value: formData.name, onChange: am => setFormData({ ...formData, name: am.target.value }), className: "w-full p-2.5 border-2 border-slate-200 rounded-xl text-sm font-bold outline-none", required: true })),
+                            e('div', null, e('label', { className: "text-xs font-bold text-slate-500 block mb-1" }, "バーコード (JANコード)"), e('div', { className: "flex gap-2" }, e('input', { value: formData.barcode, onChange: am => setFormData({ ...formData, barcode: am.target.value }), placeholder: "数字を入力するかスキャン", className: "flex-1 p-2.5 border-2 border-slate-200 rounded-xl text-sm font-bold font-mono outline-none" }), e('button', { type: "button", onClick: () => setScanMode('register'), className: "bg-blue-600 text-white px-3 rounded-xl font-bold text-sm" }, "📷 読取"))),
+                            e('div', { className: "flex gap-2" },
+                                e('div', { className: "flex-1" }, e('label', { className: "text-xs font-bold text-slate-500 block mb-1" }, "分野 *"), e('div', { className: "flex gap-1" }, e('select', { value: formData.category, onChange: am => setFormData({ ...formData, category: am.target.value }), className: "w-full p-2.5 border-2 border-slate-200 rounded-xl text-sm font-bold bg-white", required: true }, categories.map(c => e('option', { key: c, value: c }, c))), e('button', { type: "button", onClick: () => setShowCategoryModal(true), className: "p-2 bg-slate-100 rounded-xl" }, "⚙️"))),
+                                e('div', { className: "w-1/3" }, e('label', { className: "text-xs font-bold text-slate-500 block mb-1" }, "単位 *"), e('div', { className: "flex gap-1" }, e('select', { value: formData.unit, onChange: am => setFormData({ ...formData, unit: am.target.value }), className: "w-full p-2.5 border-2 border-slate-200 rounded-xl text-sm font-bold bg-white", required: true }, units.map(u => e('option', { key: u, value: u }, u))), e('button', { type: "button", onClick: () => setShowUnitModal(true), className: "p-2 bg-slate-100 rounded-xl" }, "⚙️")))
+                            ),
+                            e('div', { className: "p-3 border-2 border-slate-100 rounded-xl bg-slate-50" }, e('h4', { className: "text-xs font-bold text-slate-500 mb-2" }, "🛒 発注情報 (任意)"), e('div', { className: "flex flex-col sm:flex-row gap-2" }, e('div', { className: "flex-1" }, e('div', { className: "flex gap-1" }, e('select', { value: formData.vendor, onChange: am => setFormData({ ...formData, vendor: am.target.value }), className: "w-full p-2.5 border-2 border-slate-200 rounded-xl text-sm font-bold bg-white" }, e('option', { value: "" }, "指定なし"), vendors.map(v => e('option', { key: v, value: v }, v))), e('button', { type: "button", onClick: () => setShowVendorModal(true), className: "p-2 bg-slate-200 rounded-xl" }, "⚙️"))), e('div', { className: "flex-1" }, e('input', { value: formData.itemCode, onChange: am => setFormData({ ...formData, itemCode: am.target.value }), className: "w-full p-2.5 border-2 border-slate-200 rounded-xl text-sm font-bold outline-none", placeholder: "例: 123-456" })))),
+                            e('div', { className: "p-3 border-2 border-slate-100 rounded-xl bg-white" }, e('div', { className: "flex justify-between items-center mb-2" }, e('label', { className: "text-xs font-bold text-slate-500" }, "🏷️ タグ"), e('button', { type: "button", onClick: () => setShowTagModal(true), className: "text-[10px] font-bold text-blue-600 border px-2 py-1 rounded" }, "⚙️ 編集")), e('div', { className: "flex flex-wrap gap-1.5" }, tagsMaster.map(tag => { const isSel = formData.selectedTags?.includes(tag); return e('button', { key: tag, type: "button", onClick: () => toggleTag(tag), className: `px-2 py-1 rounded-full text-xs font-bold border transition ${isSel ? 'bg-blue-500 text-white border-blue-600' : 'bg-white text-slate-500 border-slate-300'}` }, (isSel ? '✓ ' : '') + tag); }))),
+                            e('grid', { className: "grid grid-cols-2 gap-2" }, e('div', { className: "bg-blue-50 p-2 rounded-xl" }, e('label', { className: "text-[10px] font-bold text-blue-600 block mb-1" }, "現在の在庫数"), e('input', { type: "number", min: "0", value: formData.currentStock, onChange: am => setFormData({ ...formData, currentStock: am.target.value }), className: "w-full p-2 border-2 border-blue-200 rounded-lg text-lg font-black", required: true })), e('div', { className: "bg-red-50 p-2 rounded-xl" }, e('label', { className: "text-[10px] font-bold text-red-600 block mb-1" }, "発注アラート数"), e('input', { type: "number", min: "0", value: formData.orderThreshold, onChange: am => setFormData({ ...formData, orderThreshold: am.target.value }), className: "w-full p-2 border-2 border-red-200 rounded-lg text-lg font-black", required: true }))),
+                            e('div', { className: "flex gap-2 pt-3 border-t mt-4" }, e('button', { type: "button", onClick: () => setItemModal({ isOpen: false, mode: 'add', itemId: null }), className: "flex-1 p-3 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm" }, "キャンセル"), itemModal.mode === 'edit' && e('button', { type: "button", onClick: () => { if (window.confirm('削除しますか？')) { db.collection(`groups/${groupId}/items`).doc(itemModal.itemId).delete(); setItemModal({ isOpen: false }); } }, className: "p-3 bg-red-100 text-red-600 rounded-xl font-bold text-sm" }, "削除"), e('button', { type: "submit", className: "flex-1 p-3 bg-blue-600 text-white rounded-xl font-bold text-sm" }, "保存する"))
+                        )
+                    )
+                ),
+                showCategoryModal && renderMasterModal("分野", categories, "categories", setShowCategoryModal),
+                showUnitModal && renderMasterModal("単位", units, "units", setShowUnitModal),
+                showTagModal && renderMasterModal("タグ", tagsMaster, "tags_master", setShowTagModal),
+                showVendorModal && renderMasterModal("業者名", vendors, "vendors", setShowVendorModal)
             );
         }
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+        root.render(e(App));
     </script>
 </body>
 </html>
