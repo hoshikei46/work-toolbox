@@ -8,7 +8,6 @@
     
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
 
@@ -336869,484 +336868,484 @@
 静岡県,森町,静岡県,川根本町,50`;
         // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
     </script>
-    <script type="text/babel">
-        const { useState, useEffect, useMemo, useRef } = React;
+    <script>
+const { useState, useEffect, useMemo, useRef } = React;
 
-        // --- 設定管理 (localStorage) ---
-        const DEFAULT_SETTINGS = { unitPrice: 23, defaultMisc: 200, baseStation: "", baseCity: "" };
-        const loadSettings = () => {
-            try {
-                const saved = localStorage.getItem('travelToolSettings');
-                return saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : DEFAULT_SETTINGS;
-            } catch (e) {
-                return DEFAULT_SETTINGS;
-            }
-        };
-        const saveSettings = (settings) => {
-            try {
-                localStorage.setItem('travelToolSettings', JSON.stringify(settings));
-            } catch (e) {
-                console.error('設定の保存に失敗しました', e);
-            }
-        };
+// --- 設定管理 (localStorage) ---
+const DEFAULT_SETTINGS = { unitPrice: 23, defaultMisc: 200, baseStation: "", baseCity: "" };
+const loadSettings = () => {
+  try {
+    const saved = localStorage.getItem('travelToolSettings');
+    return saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : DEFAULT_SETTINGS;
+  } catch (e) {
+    return DEFAULT_SETTINGS;
+  }
+};
+const saveSettings = (settings) => {
+  try {
+    localStorage.setItem('travelToolSettings', JSON.stringify(settings));
+  } catch (e) {
+    console.error('設定の保存に失敗しました', e);
+  }
+};
 
-        // --- Icons ---
-        const Icon = ({ name, size = 20, className = "" }) => {
-            const iconRef = useRef(null);
-            useEffect(() => {
-                if (iconRef.current) {
-                    lucide.createIcons({
-                        root: iconRef.current.parentNode,
-                        icons: { [name]: lucide.icons[name] },
-                        attrs: { class: `lucide lucide-${name} ${className}`, width: size, height: size }
-                    });
-                }
-            }, [name, size, className]);
-            return <i ref={iconRef} className="inline-block" />;
-        };
+// --- Icons ---
+const Icon = ({ name, size = 20, className = "" }) => {
+  const iconRef = useRef(null);
+  useEffect(() => {
+    if (iconRef.current) {
+      lucide.createIcons({
+        root: iconRef.current.parentNode,
+        icons: { [name]: lucide.icons[name] },
+        attrs: { class: `lucide lucide-${name} ${className}`, width: size, height: size }
+      });
+    }
+  }, [name, size, className]);
+  return /*#__PURE__*/React.createElement("i", { ref: iconRef, className: "inline-block" });
+};
 
-        // --- CSV Logic ---
-        const parseCSV = (text) => {
-            if (!text) return [];
-            const rows = [];
-            const lines = text.trim().split(/\r?\n/);
-            for (let i = 0; i < lines.length; i++) {
-                const line = lines[i].trim();
-                if (line) rows.push(line.split(',').map(v => v.trim()));
-            }
-            return rows;
-        };
+// --- CSV Logic ---
+const parseCSV = (text) => {
+  if (!text) return [];
+  const rows = [];
+  const lines = text.trim().split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (line) rows.push(line.split(',').map((v) => v.trim()));
+  }
+  return rows;
+};
 
-        const createLookupMap = (data, type) => {
-            const map = new Map();
-            if (type === 'train') {
-                data.slice(1).forEach(row => {
-                    if (row.length < 5) return;
-                    const val = { fare: parseInt(row[3]) || 0, dist: parseFloat(row[4]) || 0 };
-                    map.set(`${row[1]}-${row[2]}`, val);
-                    map.set(`${row[2]}-${row[1]}`, val);
-                });
-            } else {
-                data.slice(1).forEach(row => {
-                    if (row.length < 5) return;
-                    const val = { dist: parseFloat(row[4]) || 0 };
-                    map.set(`${row[1]}-${row[3]}`, val);
-                    map.set(`${row[3]}-${row[1]}`, val);
-                });
-            }
-            return map;
-        };
+const createLookupMap = (data, type) => {
+  const map = new Map();
+  if (type === 'train') {
+    data.slice(1).forEach((row) => {
+      if (row.length < 5) return;
+      const val = { fare: parseInt(row[3]) || 0, dist: parseFloat(row[4]) || 0 };
+      map.set(`${row[1]}-${row[2]}`, val);
+      map.set(`${row[2]}-${row[1]}`, val);
+    });
+  } else {
+    data.slice(1).forEach((row) => {
+      if (row.length < 5) return;
+      const val = { dist: parseFloat(row[4]) || 0 };
+      map.set(`${row[1]}-${row[3]}`, val);
+      map.set(`${row[3]}-${row[1]}`, val);
+    });
+  }
+  return map;
+};
 
-        // --- UI Components ---
-        const SearchableSelect = ({ label, value, onChange, options, placeholder, disabled = false, activeTab }) => {
-            const [isOpen, setIsOpen] = useState(false);
-            const [inputValue, setInputValue] = useState(value || "");
-            const [filteredOptions, setFilteredOptions] = useState([]);
-            const wrapperRef = useRef(null);
+// --- UI Components ---
+const SearchableSelect = ({ label, value, onChange, options, placeholder, disabled = false, activeTab }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [inputValue, setInputValue] = useState(value || "");
+  const [filteredOptions, setFilteredOptions] = useState([]);
+  const wrapperRef = useRef(null);
 
-            const focusRingColor = activeTab === 'car' ? 'focus:ring-emerald-800' : 'focus:ring-blue-800';
-            const hoverBgColor = activeTab === 'car' ? 'hover:bg-emerald-100' : 'hover:bg-blue-100';
+  const focusRingColor = activeTab === 'car' ? 'focus:ring-emerald-800' : 'focus:ring-blue-800';
+  const hoverBgColor = activeTab === 'car' ? 'hover:bg-emerald-100' : 'hover:bg-blue-100';
 
-            useEffect(() => { setInputValue(value || ""); }, [value]);
+  useEffect(() => {setInputValue(value || "");}, [value]);
 
-            useEffect(() => {
-                if (!isOpen) return;
-                const timer = setTimeout(() => {
-                    const term = inputValue.toLowerCase();
-                    setFilteredOptions(options.filter(opt => opt.toLowerCase().includes(term)).slice(0, 50));
-                }, 150);
-                return () => clearTimeout(timer);
-            }, [inputValue, isOpen, options]);
+  useEffect(() => {
+    if (!isOpen) return;
+    const timer = setTimeout(() => {
+      const term = inputValue.toLowerCase();
+      setFilteredOptions(options.filter((opt) => opt.toLowerCase().includes(term)).slice(0, 50));
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [inputValue, isOpen, options]);
 
-            useEffect(() => {
-                const handleClickOutside = (event) => {
-                    if (wrapperRef.current && !wrapperRef.current.contains(event.target)) setIsOpen(false);
-                };
-                document.addEventListener("mousedown", handleClickOutside);
-                return () => document.removeEventListener("mousedown", handleClickOutside);
-            }, []);
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target)) setIsOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
-            return (
-                <div className="relative mb-3" ref={wrapperRef}>
-                    <label className="block text-sm font-bold text-gray-700 mb-1">{label}</label>
-                    <div className="relative">
-                        <input
-                            type="text"
-                            className={`w-full p-2.5 border border-gray-300 rounded-lg outline-none focus:ring-2 ${focusRingColor} ${disabled ? 'bg-gray-100 text-gray-500' : 'bg-white'}`}
-                            placeholder={placeholder}
-                            value={inputValue}
-                            onFocus={() => { if (!disabled) { setIsOpen(true); setInputValue(""); } }} 
-                            onChange={(e) => { if (!disabled) { setInputValue(e.target.value); setIsOpen(true); } }}
-                            readOnly={disabled}
-                        />
-                        {isOpen && !disabled && (
-                            <ul className="absolute z-50 w-full bg-white border border-gray-300 rounded-lg mt-1 max-h-60 overflow-y-auto shadow-lg">
-                                {filteredOptions.length > 0 ? (
-                                    filteredOptions.map((opt, idx) => (
-                                        <li key={idx} className={`p-3 cursor-pointer border-b border-gray-100 last:border-0 ${hoverBgColor}`}
-                                            onMouseDown={(e) => { e.preventDefault(); onChange(opt); setInputValue(opt); setIsOpen(false); }}>
-                                            {opt}
-                                        </li>
-                                    ))
-                                ) : <li className="p-3 text-gray-500 text-sm">見つかりません</li>}
-                            </ul>
-                        )}
-                        <div className="absolute right-3 top-2.5 text-gray-400 pointer-events-none"><Icon name="chevron-down" size={20} /></div>
-                    </div>
-                </div>
-            );
-        };
+  return (/*#__PURE__*/
+    React.createElement("div", { className: "relative mb-3", ref: wrapperRef }, /*#__PURE__*/
+    React.createElement("label", { className: "block text-sm font-bold text-gray-700 mb-1" }, label), /*#__PURE__*/
+    React.createElement("div", { className: "relative" }, /*#__PURE__*/
+    React.createElement("input", {
+      type: "text",
+      className: `w-full p-2.5 border border-gray-300 rounded-lg outline-none focus:ring-2 ${focusRingColor} ${disabled ? 'bg-gray-100 text-gray-500' : 'bg-white'}`,
+      placeholder: placeholder,
+      value: inputValue,
+      onFocus: () => {if (!disabled) {setIsOpen(true);setInputValue("");}},
+      onChange: (e) => {if (!disabled) {setInputValue(e.target.value);setIsOpen(true);}},
+      readOnly: disabled }
+    ),
+    isOpen && !disabled && /*#__PURE__*/
+    React.createElement("ul", { className: "absolute z-50 w-full bg-white border border-gray-300 rounded-lg mt-1 max-h-60 overflow-y-auto shadow-lg" },
+    filteredOptions.length > 0 ?
+    filteredOptions.map((opt, idx) => /*#__PURE__*/
+    React.createElement("li", { key: idx, className: `p-3 cursor-pointer border-b border-gray-100 last:border-0 ${hoverBgColor}`,
+      onMouseDown: (e) => {e.preventDefault();onChange(opt);setInputValue(opt);setIsOpen(false);} },
+    opt
+    )
+    ) : /*#__PURE__*/
+    React.createElement("li", { className: "p-3 text-gray-500 text-sm" }, "見つかりません")
+    ), /*#__PURE__*/
 
-        // --- Main App ---
-        const App = () => {
-            const [activeTab, setActiveTab] = useState("train");
-            const [settings, setSettings] = useState(loadSettings());
-            const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-            
-            const [travelMisc, setTravelMisc] = useState(settings.defaultMisc.toString());
-            const [otherExpense, setOtherExpense] = useState("");
+    React.createElement("div", { className: "absolute right-3 top-2.5 text-gray-400 pointer-events-none" }, /*#__PURE__*/React.createElement(Icon, { name: "chevron-down", size: 20 }))
+    )
+    ));
 
-            // 初期化時に別スクリプトタグで定義した window.FIXED_TRAIN_CSV 等を読み込む
-            const trainData = useMemo(() => parseCSV(window.FIXED_TRAIN_CSV), []);
-            const carData = useMemo(() => parseCSV(window.FIXED_CAR_CSV), []);
-            
-            const maps = useMemo(() => ({
-                train: createLookupMap(trainData, 'train'),
-                car: createLookupMap(carData, 'car')
-            }), [trainData, carData]);
+};
 
-            const trainStations = useMemo(() => {
-                const set = new Set();
-                trainData.slice(1).forEach(r => { if(r[1]) set.add(r[1]); if(r[2]) set.add(r[2]); });
-                return Array.from(set).sort();
-            }, [trainData]);
+// --- Main App ---
+const App = () => {
+  const [activeTab, setActiveTab] = useState("train");
+  const [settings, setSettings] = useState(loadSettings());
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-            const carLocations = useMemo(() => {
-                const set = new Set();
-                carData.slice(1).forEach(r => { if(r[1]) set.add(r[1]); if(r[3]) set.add(r[3]); });
-                return Array.from(set).sort();
-            }, [carData]);
+  const [travelMisc, setTravelMisc] = useState(settings.defaultMisc.toString());
+  const [otherExpense, setOtherExpense] = useState("");
 
-            const [trainRoute, setTrainRoute] = useState({ start: settings.baseStation, vias: Array(6).fill(""), end: "", commuteFlags: {} });
-            const [trainViaCount, setTrainViaCount] = useState(1);
-            const [trainSameStartEnd, setTrainSameStartEnd] = useState(false);
+  // 初期化時に別スクリプトタグで定義した window.FIXED_TRAIN_CSV 等を読み込む
+  const trainData = useMemo(() => parseCSV(window.FIXED_TRAIN_CSV), []);
+  const carData = useMemo(() => parseCSV(window.FIXED_CAR_CSV), []);
 
-            const [carRoute, setCarRoute] = useState({ start: settings.baseCity, vias: Array(6).fill(""), end: "", commuteDist: 0, isRoundTrip: false });
-            const [carViaCount, setCarViaCount] = useState(1);
-            const [carSameStartEnd, setCarSameStartEnd] = useState(false);
+  const maps = useMemo(() => ({
+    train: createLookupMap(trainData, 'train'),
+    car: createLookupMap(carData, 'car')
+  }), [trainData, carData]);
 
-            useEffect(() => { if (trainSameStartEnd) setTrainRoute(p => ({ ...p, end: p.start })); }, [trainRoute.start, trainSameStartEnd]);
-            useEffect(() => { if (carSameStartEnd) setCarRoute(p => ({ ...p, end: p.start })); }, [carRoute.start, carSameStartEnd]);
+  const trainStations = useMemo(() => {
+    const set = new Set();
+    trainData.slice(1).forEach((r) => {if (r[1]) set.add(r[1]);if (r[2]) set.add(r[2]);});
+    return Array.from(set).sort();
+  }, [trainData]);
 
-            const handleClear = () => {
-                if(confirm('入力内容をクリアしますか？')) {
-                    if (activeTab === "train") {
-                        setTrainRoute({ start: settings.baseStation, vias: Array(6).fill(""), end: "", commuteFlags: {} });
-                        setTrainSameStartEnd(false);
-                        setTrainViaCount(1);
-                    } else {
-                        setCarRoute({ start: settings.baseCity, vias: Array(6).fill(""), end: "", commuteDist: 0, isRoundTrip: false });
-                        setCarSameStartEnd(false);
-                        setCarViaCount(1);
-                    }
-                    setTravelMisc(settings.defaultMisc.toString());
-                    setOtherExpense("");
-                }
-            };
+  const carLocations = useMemo(() => {
+    const set = new Set();
+    carData.slice(1).forEach((r) => {if (r[1]) set.add(r[1]);if (r[3]) set.add(r[3]);});
+    return Array.from(set).sort();
+  }, [carData]);
 
-            const handleSaveSettings = (newSettings) => {
-                setSettings(newSettings);
-                saveSettings(newSettings);
-                setIsSettingsOpen(false);
-                
-                setTrainRoute(p => p.start === "" ? { ...p, start: newSettings.baseStation } : p);
-                setCarRoute(p => p.start === "" ? { ...p, start: newSettings.baseCity } : p);
-                setTravelMisc(newSettings.defaultMisc.toString());
-            };
+  const [trainRoute, setTrainRoute] = useState({ start: settings.baseStation, vias: Array(6).fill(""), end: "", commuteFlags: {} });
+  const [trainViaCount, setTrainViaCount] = useState(1);
+  const [trainSameStartEnd, setTrainSameStartEnd] = useState(false);
 
-            const calculateTrain = () => {
-                const pts = [trainRoute.start, ...trainRoute.vias.slice(0, trainViaCount).filter(v=>v), trainRoute.end].filter(p=>p);
-                if (pts.length < 2) return { segments: [], totalFare: 0, totalDist: 0 };
-                let segments = [], totalFare = 0, totalDist = 0;
-                for (let i = 0; i < pts.length - 1; i++) {
-                    const f = pts[i], t = pts[i+1], isC = trainRoute.commuteFlags[i] || false;
-                    const val = maps.train.get(`${f}-${t}`);
-                    let fare = val ? val.fare : 0, dist = val ? val.dist : 0;
-                    let ef = isC ? 0 : fare;
-                    segments.push({ from: f, to: t, fare, dist, isCommute: isC, effectiveFare: ef, found: !!val });
-                    totalFare += ef; totalDist += dist;
-                }
-                return { segments, totalFare, totalDist };
-            };
+  const [carRoute, setCarRoute] = useState({ start: settings.baseCity, vias: Array(6).fill(""), end: "", commuteDist: 0, isRoundTrip: false });
+  const [carViaCount, setCarViaCount] = useState(1);
+  const [carSameStartEnd, setCarSameStartEnd] = useState(false);
 
-            const calculateCar = () => {
-                const pts = [carRoute.start, ...carRoute.vias.slice(0, carViaCount).filter(v=>v), carRoute.end].filter(p=>p);
-                if (pts.length < 2) return { segments: [], totalDist: 0, payableDist: 0, totalCost: 0, deduction: 0 };
-                let segments = [], totalDist = 0;
-                for (let i = 0; i < pts.length - 1; i++) {
-                    const f = pts[i], t = pts[i+1];
-                    const val = maps.car.get(`${f}-${t}`);
-                    let dist = val ? val.dist : 0;
-                    segments.push({ from: f, to: t, dist, found: !!val });
-                    totalDist += dist;
-                }
-                const ded = (parseFloat(carRoute.commuteDist) || 0) * (carRoute.isRoundTrip ? 2 : 1);
-                let pay = Math.floor(Math.max(0, totalDist + 15 - ded));
-                return { segments, totalDist, payableDist: pay, totalCost: Math.floor(pay * settings.unitPrice), deduction: ded };
-            };
+  useEffect(() => {if (trainSameStartEnd) setTrainRoute((p) => ({ ...p, end: p.start }));}, [trainRoute.start, trainSameStartEnd]);
+  useEffect(() => {if (carSameStartEnd) setCarRoute((p) => ({ ...p, end: p.start }));}, [carRoute.start, carSameStartEnd]);
 
-            const trainResult = calculateTrain();
-            const carResult = calculateCar();
+  const handleClear = () => {
+    if (confirm('入力内容をクリアしますか？')) {
+      if (activeTab === "train") {
+        setTrainRoute({ start: settings.baseStation, vias: Array(6).fill(""), end: "", commuteFlags: {} });
+        setTrainSameStartEnd(false);
+        setTrainViaCount(1);
+      } else {
+        setCarRoute({ start: settings.baseCity, vias: Array(6).fill(""), end: "", commuteDist: 0, isRoundTrip: false });
+        setCarSameStartEnd(false);
+        setCarViaCount(1);
+      }
+      setTravelMisc(settings.defaultMisc.toString());
+      setOtherExpense("");
+    }
+  };
 
-            const baseCost = activeTab === "train" ? trainResult.totalFare : carResult.totalCost;
-            const parsedMisc = parseInt(travelMisc, 10) || 0;
-            const parsedOther = parseInt(otherExpense, 10) || 0;
-            const grandTotal = baseCost + parsedMisc + parsedOther;
+  const handleSaveSettings = (newSettings) => {
+    setSettings(newSettings);
+    saveSettings(newSettings);
+    setIsSettingsOpen(false);
 
-            return (
-                <div className={`max-w-md mx-auto min-h-screen flex flex-col relative transition-colors duration-300 ${activeTab === 'train' ? 'bg-blue-100' : 'bg-emerald-100'}`}>
-                    
-                    <header className={`text-white p-3 shadow sticky top-0 z-20 flex justify-between items-center transition-colors duration-300 ${activeTab === 'train' ? 'bg-blue-800' : 'bg-emerald-800'}`}>
-                        <h1 className="text-lg font-bold flex items-center gap-1"><Icon name="calculator" size={20} /> 旅費計算（令和8年3月版）Ver_1.0</h1>
-                        <button 
-                            onClick={() => setIsSettingsOpen(true)} 
-                            className={`text-white text-sm font-bold py-1.5 px-3 rounded-lg flex items-center gap-1 border shadow-sm transition-colors ${activeTab === 'train' ? 'bg-blue-900 hover:bg-blue-950 border-blue-700' : 'bg-emerald-900 hover:bg-emerald-950 border-emerald-700'}`}
-                        >
-                            <Icon name="settings" size={16} /> 設定
-                        </button>
-                    </header>
+    setTrainRoute((p) => p.start === "" ? { ...p, start: newSettings.baseStation } : p);
+    setCarRoute((p) => p.start === "" ? { ...p, start: newSettings.baseCity } : p);
+    setTravelMisc(newSettings.defaultMisc.toString());
+  };
 
-                    <div className="flex bg-white shadow-sm sticky top-[56px] z-10">
-                        <button onClick={()=>setActiveTab("train")} className={`flex-1 py-2.5 text-sm font-bold flex justify-center items-center gap-1 transition-colors ${activeTab==="train"?"text-blue-900 border-b-2 border-blue-800 bg-blue-200":"text-gray-500 bg-white"}`}>
-                            <Icon name="train" size={18} /> 鉄道
-                        </button>
-                        <button onClick={()=>setActiveTab("car")} className={`flex-1 py-2.5 text-sm font-bold flex justify-center items-center gap-1 transition-colors ${activeTab==="car"?"text-emerald-900 border-b-2 border-emerald-800 bg-emerald-200":"text-gray-500 bg-white"}`}>
-                            <Icon name="car" size={18} /> 自動車
-                        </button>
-                    </div>
+  const calculateTrain = () => {
+    const pts = [trainRoute.start, ...trainRoute.vias.slice(0, trainViaCount).filter((v) => v), trainRoute.end].filter((p) => p);
+    if (pts.length < 2) return { segments: [], totalFare: 0, totalDist: 0 };
+    let segments = [],totalFare = 0,totalDist = 0;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const f = pts[i],t = pts[i + 1],isC = trainRoute.commuteFlags[i] || false;
+      const val = maps.train.get(`${f}-${t}`);
+      let fare = val ? val.fare : 0,dist = val ? val.dist : 0;
+      let ef = isC ? 0 : fare;
+      segments.push({ from: f, to: t, fare, dist, isCommute: isC, effectiveFare: ef, found: !!val });
+      totalFare += ef;totalDist += dist;
+    }
+    return { segments, totalFare, totalDist };
+  };
 
-                    <main className="flex-1 p-3 pb-36 overflow-y-auto no-scrollbar">
-                        {activeTab === "train" && (
-                            <div className="space-y-3 animate-in fade-in duration-300">
-                                <div className="bg-white p-3.5 rounded-xl shadow-sm space-y-2">
-                                   <div className="flex justify-between items-center border-b pb-1 mb-2">
-                                       <h2 className="font-bold text-gray-700 text-sm">経路入力</h2>
-                                       <button onClick={handleClear} className="text-xs font-bold text-red-600 bg-red-50 px-2 py-1 rounded hover:bg-red-100 flex items-center gap-1"><Icon name="trash-2" size={14}/>クリア</button>
-                                    </div>
-                                    <SearchableSelect label="出発駅" options={trainStations} value={trainRoute.start} onChange={v => setTrainRoute(p=>({...p, start: v}))} placeholder="駅名..." activeTab={activeTab} />
-                                    
-                                    {[...Array(trainViaCount)].map((_, i) => (
-                                        <div key={i} className="pl-3 border-l-2 border-blue-300 ml-1.5 relative">
-                                            <SearchableSelect label={`用務先（経由駅）${i+1}`} options={trainStations} value={trainRoute.vias[i]} onChange={v => { const n=[...trainRoute.vias]; n[i]=v; setTrainRoute(p=>({...p, vias: n})); }} placeholder="(省略可)" activeTab={activeTab} />
-                                        </div>
-                                    ))}
-                                    {trainViaCount < 6 && <button onClick={()=>setTrainViaCount(c=>c+1)} className="text-sm font-bold text-blue-800 flex items-center gap-1 ml-5 bg-blue-100 px-3 py-1 rounded-full hover:bg-blue-200"><Icon name="plus" size={16}/> 用務先を追加</button>}
-                                    
-                                    <div className="pt-2 border-t mt-2">
-                                        <label className="flex items-center gap-2 mb-1.5 cursor-pointer w-fit"><input type="checkbox" checked={trainSameStartEnd} onChange={e=>setTrainSameStartEnd(e.target.checked)} className="w-4 h-4 text-blue-800 rounded focus:ring-blue-800"/> <span className="text-sm text-gray-700 font-bold">出発地と同じ</span></label>
-                                        <SearchableSelect label="到着駅" options={trainStations} value={trainRoute.end} onChange={v => setTrainRoute(p=>({...p, end: v}))} placeholder="駅名..." disabled={trainSameStartEnd} activeTab={activeTab} />
-                                    </div>
-                                </div>
-                                
-                                <div className="bg-white p-3.5 rounded-xl shadow-sm">
-                                    <div className="mb-2">
-                                        <h2 className="font-bold text-gray-700 text-sm">計算結果</h2>
-                                    </div>
-                                    {trainResult.segments.length===0 ? <p className="text-center text-sm text-gray-400 py-4">経路を入力してください</p> : 
-                                        trainResult.segments.map((s, i) => (
-                                            <div key={i} className={`p-2.5 rounded-lg border mb-2 ${s.found ? 'bg-gray-50 border-gray-200' : 'bg-red-50 border-red-200'}`}>
-                                                <div className="flex justify-between font-bold text-sm mb-1">
-                                                    <span className="text-gray-800">{s.from} <span className="text-gray-400 mx-1">→</span> {s.to}</span> 
-                                                    {!s.found && <span className="text-red-600 text-xs bg-red-100 px-1.5 py-0.5 rounded">マスタなし</span>}
-                                                </div>
-                                                <div className="flex justify-between items-end">
-                                                    <div className="text-sm text-gray-600 font-medium">{s.dist.toFixed(1)}km / {s.fare}円</div>
-                                                    <label className="text-xs font-bold flex items-center gap-1.5 bg-white px-2 py-1 border border-gray-300 rounded shadow-sm cursor-pointer hover:bg-gray-50 select-none">
-                                                        <input type="checkbox" className="w-3.5 h-3.5 text-blue-800 rounded focus:ring-blue-800" checked={s.isCommute} onChange={e => setTrainRoute(p=>({...p, commuteFlags: {...p.commuteFlags, [i]: e.target.checked}}))} /> 通勤調整
-                                                    </label>
-                                                </div>
-                                            </div>
-                                        ))
-                                    }
-                                </div>
-                            </div>
-                        )}
+  const calculateCar = () => {
+    const pts = [carRoute.start, ...carRoute.vias.slice(0, carViaCount).filter((v) => v), carRoute.end].filter((p) => p);
+    if (pts.length < 2) return { segments: [], totalDist: 0, payableDist: 0, totalCost: 0, deduction: 0 };
+    let segments = [],totalDist = 0;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const f = pts[i],t = pts[i + 1];
+      const val = maps.car.get(`${f}-${t}`);
+      let dist = val ? val.dist : 0;
+      segments.push({ from: f, to: t, dist, found: !!val });
+      totalDist += dist;
+    }
+    const ded = (parseFloat(carRoute.commuteDist) || 0) * (carRoute.isRoundTrip ? 2 : 1);
+    let pay = Math.floor(Math.max(0, totalDist + 15 - ded));
+    return { segments, totalDist, payableDist: pay, totalCost: Math.floor(pay * settings.unitPrice), deduction: ded };
+  };
 
-                        {activeTab === "car" && (
-                            <div className="space-y-3 animate-in fade-in duration-300">
-                                <div className="bg-white p-3.5 rounded-xl shadow-sm space-y-2">
-                                    <div className="flex justify-between items-center border-b pb-1 mb-2">
-                                        <h2 className="font-bold text-gray-700 text-sm">経路入力</h2>
-                                        <button onClick={handleClear} className="text-xs font-bold text-red-600 bg-red-50 px-2 py-1 rounded hover:bg-red-100 flex items-center gap-1"><Icon name="trash-2" size={14}/>クリア</button>
-                                    </div>
-                                    <SearchableSelect label="出発地" options={carLocations} value={carRoute.start} onChange={v => setCarRoute(p=>({...p, start: v}))} placeholder="市区町村..." activeTab={activeTab} />
-                                    
-                                    {[...Array(carViaCount)].map((_, i) => (
-                                        <div key={i} className="pl-3 border-l-2 border-emerald-300 ml-1.5 relative">
-                                            <SearchableSelect label={`用務先（経由地）${i+1}`} options={carLocations} value={carRoute.vias[i]} onChange={v => { const n=[...carRoute.vias]; n[i]=v; setCarRoute(p=>({...p, vias: n})); }} placeholder="(省略可)" activeTab={activeTab} />
-                                        </div>
-                                    ))}
-                                    {carViaCount < 6 && <button onClick={()=>setCarViaCount(c=>c+1)} className="text-sm font-bold text-emerald-800 flex items-center gap-1 ml-5 bg-emerald-100 px-3 py-1 rounded-full hover:bg-emerald-200"><Icon name="plus" size={16}/> 用務先を追加</button>}
-                                    
-                                    <div className="pt-2 border-t mt-2">
-                                        <label className="flex items-center gap-2 mb-1.5 cursor-pointer w-fit"><input type="checkbox" checked={carSameStartEnd} onChange={e=>setCarSameStartEnd(e.target.checked)} className="w-4 h-4 text-emerald-800 rounded focus:ring-emerald-800"/> <span className="text-sm text-gray-700 font-bold">出発地と同じ</span></label>
-                                        <SearchableSelect label="到着地" options={carLocations} value={carRoute.end} onChange={v => setCarRoute(p=>({...p, end: v}))} placeholder="市区町村..." disabled={carSameStartEnd} activeTab={activeTab} />
-                                    </div>
-                                    
-                                    <div className="grid grid-cols-2 gap-3 pt-3 border-t">
-                                        <div>
-                                            <label className="block text-sm font-bold text-gray-700 mb-1">通勤距離(km)</label>
-                                            <input type="number" step="0.1" min="0" className="w-full p-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-emerald-800 text-center" value={carRoute.commuteDist} onChange={e=>setCarRoute(p=>({...p, commuteDist: e.target.value}))}/>
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-bold text-gray-700 mb-1">往復/片道</label>
-                                            <div className="flex bg-gray-100 p-1 rounded-lg">
-                                                <button className={`flex-1 rounded-md text-sm font-bold py-1 transition-colors ${!carRoute.isRoundTrip?'bg-white shadow text-emerald-800':'text-gray-500 hover:bg-gray-200'}`} onClick={()=>setCarRoute(p=>({...p, isRoundTrip: false}))}>片道</button>
-                                                <button className={`flex-1 rounded-md text-sm font-bold py-1 transition-colors ${carRoute.isRoundTrip?'bg-white shadow text-emerald-800':'text-gray-500 hover:bg-gray-200'}`} onClick={()=>setCarRoute(p=>({...p, isRoundTrip: true}))}>往復</button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                <div className="bg-white p-3.5 rounded-xl shadow-sm">
-                                    <div className="mb-2">
-                                        <h2 className="font-bold text-gray-700 text-sm">計算結果</h2>
-                                    </div>
-                                    {carResult.segments.length===0 ? <p className="text-center text-sm text-gray-400 py-4">経路を入力してください</p> : 
-                                        <div className="text-sm space-y-2 font-medium">
-                                            {carResult.segments.map((s,i) => (
-                                                <div key={i} className="flex justify-between border-b border-gray-100 pb-1.5">
-                                                    <span className="text-gray-700">{s.from} <span className="text-gray-400 mx-1">→</span> {s.to}</span> 
-                                                    <span className={s.found?"text-gray-800":"text-red-600 font-bold bg-red-50 px-1 rounded"}>{s.found ? s.dist.toFixed(1) + "km" : "不明"}</span>
-                                                </div>
-                                            ))}
-                                            <div className="bg-gray-50 p-2.5 rounded-lg space-y-1 border border-gray-100 text-xs">
-                                                <div className="flex justify-between text-gray-600"><span>総距離</span><span>{carResult.totalDist.toFixed(1)} km</span></div>
-                                                <div className="flex justify-between text-gray-600"><span>基本加算</span><span className="text-emerald-800">+15.0 km</span></div>
-                                                <div className="flex justify-between text-gray-600"><span>通勤控除</span><span className="text-red-500">-{carResult.deduction.toFixed(1)} km</span></div>
-                                                <div className="flex justify-between font-bold text-gray-800 border-t border-gray-200 pt-1.5 mt-1.5 text-sm">
-                                                    <span>支給対象距離 <span className="text-[10px] font-normal text-gray-500">(切捨)</span></span>
-                                                    <span>{carResult.payableDist} km</span>
-                                                </div>
-                                                <div className="flex justify-between text-[10px] text-gray-500 pt-0.5">
-                                                    <span>単価設定: {settings.unitPrice}円/km</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    }
-                                </div>
-                            </div>
-                        )}
-                    </main>
+  const trainResult = calculateTrain();
+  const carResult = calculateCar();
 
-                    <footer className={`fixed bottom-0 left-0 right-0 mx-auto max-w-md border-t border-gray-200 px-3 py-2 shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.1)] z-20 transition-colors duration-300 ${activeTab === 'train' ? 'bg-blue-100' : 'bg-emerald-100'}`}>
-                        <div className="space-y-1">
-                            <div className="flex justify-between items-center">
-                                <span className="text-xs font-bold text-gray-700">{activeTab === 'train' ? '鉄道賃' : '車賃'}</span>
-                                <span className="text-sm font-bold text-gray-800">{baseCost.toLocaleString()}<span className="text-[10px] font-normal text-gray-600 ml-1">円</span></span>
-                            </div>
-                            
-                            <div className="flex justify-between items-center">
-                                <span className="text-xs font-bold text-gray-700 flex items-center gap-1"><Icon name="plus" size={12}/> 旅行雑費</span>
-                                <div className="flex items-center gap-1">
-                                    <input 
-                                        type="number" 
-                                        min="0" 
-                                        placeholder="0" 
-                                        className={`bg-white w-20 px-2 py-0.5 border border-gray-300 rounded text-right text-sm outline-none focus:ring-2 ${activeTab === 'train' ? 'focus:ring-blue-800' : 'focus:ring-emerald-800'}`} 
-                                        value={travelMisc} 
-                                        onChange={e => setTravelMisc(e.target.value)} 
-                                    />
-                                    <span className="text-xs text-gray-600">円</span>
-                                </div>
-                            </div>
+  const baseCost = activeTab === "train" ? trainResult.totalFare : carResult.totalCost;
+  const parsedMisc = parseInt(travelMisc, 10) || 0;
+  const parsedOther = parseInt(otherExpense, 10) || 0;
+  const grandTotal = baseCost + parsedMisc + parsedOther;
 
-                            <div className="flex justify-between items-center border-b border-dashed border-gray-300 pb-1.5">
-                                <span className="text-xs font-bold text-gray-700 flex items-center gap-1"><Icon name="plus" size={12}/> その他</span>
-                                <div className="flex items-center gap-1">
-                                    <input 
-                                        type="number" 
-                                        min="0" 
-                                        placeholder="0" 
-                                        className={`bg-white w-20 px-2 py-0.5 border border-gray-300 rounded text-right text-sm outline-none focus:ring-2 ${activeTab === 'train' ? 'focus:ring-blue-800' : 'focus:ring-emerald-800'}`} 
-                                        value={otherExpense} 
-                                        onChange={e => setOtherExpense(e.target.value)} 
-                                    />
-                                    <span className="text-xs text-gray-600">円</span>
-                                </div>
-                            </div>
+  return (/*#__PURE__*/
+    React.createElement("div", { className: `max-w-md mx-auto min-h-screen flex flex-col relative transition-colors duration-300 ${activeTab === 'train' ? 'bg-blue-100' : 'bg-emerald-100'}` }, /*#__PURE__*/
 
-                            <div className="flex justify-between items-end pt-0.5">
-                                <span className="text-xs font-black text-gray-800">＝ 支給額</span>
-                                <div className={`text-xl font-black tracking-tight ${activeTab === 'train' ? 'text-blue-800' : 'text-emerald-800'}`}>
-                                    {grandTotal.toLocaleString()}
-                                    <span className="text-xs font-medium text-gray-600 ml-1 tracking-normal">円</span>
-                                </div>
-                            </div>
-                        </div>
-                    </footer>
+    React.createElement("header", { className: `text-white p-3 shadow sticky top-0 z-20 flex justify-between items-center transition-colors duration-300 ${activeTab === 'train' ? 'bg-blue-800' : 'bg-emerald-800'}` }, /*#__PURE__*/
+    React.createElement("h1", { className: "text-lg font-bold flex items-center gap-1" }, /*#__PURE__*/React.createElement(Icon, { name: "calculator", size: 20 }), " 旅費計算（令和8年3月版）Ver_1.0"), /*#__PURE__*/
+    React.createElement("button", {
+      onClick: () => setIsSettingsOpen(true),
+      className: `text-white text-sm font-bold py-1.5 px-3 rounded-lg flex items-center gap-1 border shadow-sm transition-colors ${activeTab === 'train' ? 'bg-blue-900 hover:bg-blue-950 border-blue-700' : 'bg-emerald-900 hover:bg-emerald-950 border-emerald-700'}` }, /*#__PURE__*/
 
-                    {isSettingsOpen && (
-                        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                            <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-200">
-                                <div className="bg-gray-50 px-4 py-3 border-b flex justify-between items-center">
-                                    <h2 className="font-bold text-gray-800 flex items-center gap-2"><Icon name="settings" size={18} /> 初期設定</h2>
-                                    <button onClick={() => setIsSettingsOpen(false)} className="text-gray-400 hover:text-gray-600"><Icon name="x" size={20} /></button>
-                                </div>
-                                <div className="p-4 space-y-3 max-h-[70vh] overflow-y-auto">
-                                    <div>
-                                        <label className="block text-xs font-bold text-gray-700 mb-1">自動車単価 (円/km)</label>
-                                        <input 
-                                            type="number" 
-                                            className={`w-full p-2 border border-gray-300 rounded-lg outline-none focus:ring-2 ${activeTab === 'train' ? 'focus:ring-blue-800' : 'focus:ring-emerald-800'}`}
-                                            value={settings.unitPrice} 
-                                            onChange={e => setSettings(p => ({ ...p, unitPrice: Number(e.target.value) }))}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-gray-700 mb-1">旅行雑費 初期値 (円)</label>
-                                        <input 
-                                            type="number" 
-                                            className={`w-full p-2 border border-gray-300 rounded-lg outline-none focus:ring-2 ${activeTab === 'train' ? 'focus:ring-blue-800' : 'focus:ring-emerald-800'}`}
-                                            value={settings.defaultMisc} 
-                                            onChange={e => setSettings(p => ({ ...p, defaultMisc: Number(e.target.value) }))}
-                                        />
-                                    </div>
-                                    <div className="relative z-40">
-                                        <SearchableSelect 
-                                            label="所属所の最寄駅 (鉄道の出発地初期値)" 
-                                            options={trainStations} 
-                                            value={settings.baseStation} 
-                                            onChange={v => setSettings(p => ({ ...p, baseStation: v }))} 
-                                            placeholder="駅名..."
-                                            activeTab={activeTab}
-                                        />
-                                    </div>
-                                    <div className="relative z-30">
-                                        <SearchableSelect 
-                                            label="所属所の市区町村 (自動車の出発地初期値)" 
-                                            options={carLocations} 
-                                            value={settings.baseCity} 
-                                            onChange={v => setSettings(p => ({ ...p, baseCity: v }))} 
-                                            placeholder="市区町村..."
-                                            activeTab={activeTab}
-                                        />
-                                    </div>
-                                </div>
-                                <div className="p-3 border-t bg-gray-50 flex justify-end gap-2">
-                                    <button onClick={() => setIsSettingsOpen(false)} className="px-3 py-1.5 text-sm font-bold text-gray-600 hover:bg-gray-200 rounded-lg transition-colors">キャンセル</button>
-                                    <button onClick={() => handleSaveSettings(settings)} className={`px-4 py-1.5 text-sm font-bold text-white rounded-lg shadow transition-colors ${activeTab === 'train' ? 'bg-blue-800 hover:bg-blue-900' : 'bg-emerald-800 hover:bg-emerald-900'}`}>保存する</button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
+    React.createElement(Icon, { name: "settings", size: 16 }), " 設定"
+    )
+    ), /*#__PURE__*/
 
-                </div>
-            );
-        };
+    React.createElement("div", { className: "flex bg-white shadow-sm sticky top-[56px] z-10" }, /*#__PURE__*/
+    React.createElement("button", { onClick: () => setActiveTab("train"), className: `flex-1 py-2.5 text-sm font-bold flex justify-center items-center gap-1 transition-colors ${activeTab === "train" ? "text-blue-900 border-b-2 border-blue-800 bg-blue-200" : "text-gray-500 bg-white"}` }, /*#__PURE__*/
+    React.createElement(Icon, { name: "train", size: 18 }), " 鉄道"
+    ), /*#__PURE__*/
+    React.createElement("button", { onClick: () => setActiveTab("car"), className: `flex-1 py-2.5 text-sm font-bold flex justify-center items-center gap-1 transition-colors ${activeTab === "car" ? "text-emerald-900 border-b-2 border-emerald-800 bg-emerald-200" : "text-gray-500 bg-white"}` }, /*#__PURE__*/
+    React.createElement(Icon, { name: "car", size: 18 }), " 自動車"
+    )
+    ), /*#__PURE__*/
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+    React.createElement("main", { className: "flex-1 p-3 pb-36 overflow-y-auto no-scrollbar" },
+    activeTab === "train" && /*#__PURE__*/
+    React.createElement("div", { className: "space-y-3 animate-in fade-in duration-300" }, /*#__PURE__*/
+    React.createElement("div", { className: "bg-white p-3.5 rounded-xl shadow-sm space-y-2" }, /*#__PURE__*/
+    React.createElement("div", { className: "flex justify-between items-center border-b pb-1 mb-2" }, /*#__PURE__*/
+    React.createElement("h2", { className: "font-bold text-gray-700 text-sm" }, "経路入力"), /*#__PURE__*/
+    React.createElement("button", { onClick: handleClear, className: "text-xs font-bold text-red-600 bg-red-50 px-2 py-1 rounded hover:bg-red-100 flex items-center gap-1" }, /*#__PURE__*/React.createElement(Icon, { name: "trash-2", size: 14 }), "クリア")
+    ), /*#__PURE__*/
+    React.createElement(SearchableSelect, { label: "出発駅", options: trainStations, value: trainRoute.start, onChange: (v) => setTrainRoute((p) => ({ ...p, start: v })), placeholder: "駅名...", activeTab: activeTab }),
+
+    [...Array(trainViaCount)].map((_, i) => /*#__PURE__*/
+    React.createElement("div", { key: i, className: "pl-3 border-l-2 border-blue-300 ml-1.5 relative" }, /*#__PURE__*/
+    React.createElement(SearchableSelect, { label: `用務先（経由駅）${i + 1}`, options: trainStations, value: trainRoute.vias[i], onChange: (v) => {const n = [...trainRoute.vias];n[i] = v;setTrainRoute((p) => ({ ...p, vias: n }));}, placeholder: "(省略可)", activeTab: activeTab })
+    )
+    ),
+    trainViaCount < 6 && /*#__PURE__*/React.createElement("button", { onClick: () => setTrainViaCount((c) => c + 1), className: "text-sm font-bold text-blue-800 flex items-center gap-1 ml-5 bg-blue-100 px-3 py-1 rounded-full hover:bg-blue-200" }, /*#__PURE__*/React.createElement(Icon, { name: "plus", size: 16 }), " 用務先を追加"), /*#__PURE__*/
+
+    React.createElement("div", { className: "pt-2 border-t mt-2" }, /*#__PURE__*/
+    React.createElement("label", { className: "flex items-center gap-2 mb-1.5 cursor-pointer w-fit" }, /*#__PURE__*/React.createElement("input", { type: "checkbox", checked: trainSameStartEnd, onChange: (e) => setTrainSameStartEnd(e.target.checked), className: "w-4 h-4 text-blue-800 rounded focus:ring-blue-800" }), " ", /*#__PURE__*/React.createElement("span", { className: "text-sm text-gray-700 font-bold" }, "出発地と同じ")), /*#__PURE__*/
+    React.createElement(SearchableSelect, { label: "到着駅", options: trainStations, value: trainRoute.end, onChange: (v) => setTrainRoute((p) => ({ ...p, end: v })), placeholder: "駅名...", disabled: trainSameStartEnd, activeTab: activeTab })
+    )
+    ), /*#__PURE__*/
+
+    React.createElement("div", { className: "bg-white p-3.5 rounded-xl shadow-sm" }, /*#__PURE__*/
+    React.createElement("div", { className: "mb-2" }, /*#__PURE__*/
+    React.createElement("h2", { className: "font-bold text-gray-700 text-sm" }, "計算結果")
+    ),
+    trainResult.segments.length === 0 ? /*#__PURE__*/React.createElement("p", { className: "text-center text-sm text-gray-400 py-4" }, "経路を入力してください") :
+    trainResult.segments.map((s, i) => /*#__PURE__*/
+    React.createElement("div", { key: i, className: `p-2.5 rounded-lg border mb-2 ${s.found ? 'bg-gray-50 border-gray-200' : 'bg-red-50 border-red-200'}` }, /*#__PURE__*/
+    React.createElement("div", { className: "flex justify-between font-bold text-sm mb-1" }, /*#__PURE__*/
+    React.createElement("span", { className: "text-gray-800" }, s.from, " ", /*#__PURE__*/React.createElement("span", { className: "text-gray-400 mx-1" }, "→"), " ", s.to),
+    !s.found && /*#__PURE__*/React.createElement("span", { className: "text-red-600 text-xs bg-red-100 px-1.5 py-0.5 rounded" }, "マスタなし")
+    ), /*#__PURE__*/
+    React.createElement("div", { className: "flex justify-between items-end" }, /*#__PURE__*/
+    React.createElement("div", { className: "text-sm text-gray-600 font-medium" }, s.dist.toFixed(1), "km / ", s.fare, "円"), /*#__PURE__*/
+    React.createElement("label", { className: "text-xs font-bold flex items-center gap-1.5 bg-white px-2 py-1 border border-gray-300 rounded shadow-sm cursor-pointer hover:bg-gray-50 select-none" }, /*#__PURE__*/
+    React.createElement("input", { type: "checkbox", className: "w-3.5 h-3.5 text-blue-800 rounded focus:ring-blue-800", checked: s.isCommute, onChange: (e) => setTrainRoute((p) => ({ ...p, commuteFlags: { ...p.commuteFlags, [i]: e.target.checked } })) }), " 通勤調整"
+    )
+    )
+    )
+    )
+
+    )
+    ),
+
+
+    activeTab === "car" && /*#__PURE__*/
+    React.createElement("div", { className: "space-y-3 animate-in fade-in duration-300" }, /*#__PURE__*/
+    React.createElement("div", { className: "bg-white p-3.5 rounded-xl shadow-sm space-y-2" }, /*#__PURE__*/
+    React.createElement("div", { className: "flex justify-between items-center border-b pb-1 mb-2" }, /*#__PURE__*/
+    React.createElement("h2", { className: "font-bold text-gray-700 text-sm" }, "経路入力"), /*#__PURE__*/
+    React.createElement("button", { onClick: handleClear, className: "text-xs font-bold text-red-600 bg-red-50 px-2 py-1 rounded hover:bg-red-100 flex items-center gap-1" }, /*#__PURE__*/React.createElement(Icon, { name: "trash-2", size: 14 }), "クリア")
+    ), /*#__PURE__*/
+    React.createElement(SearchableSelect, { label: "出発地", options: carLocations, value: carRoute.start, onChange: (v) => setCarRoute((p) => ({ ...p, start: v })), placeholder: "市区町村...", activeTab: activeTab }),
+
+    [...Array(carViaCount)].map((_, i) => /*#__PURE__*/
+    React.createElement("div", { key: i, className: "pl-3 border-l-2 border-emerald-300 ml-1.5 relative" }, /*#__PURE__*/
+    React.createElement(SearchableSelect, { label: `用務先（経由地）${i + 1}`, options: carLocations, value: carRoute.vias[i], onChange: (v) => {const n = [...carRoute.vias];n[i] = v;setCarRoute((p) => ({ ...p, vias: n }));}, placeholder: "(省略可)", activeTab: activeTab })
+    )
+    ),
+    carViaCount < 6 && /*#__PURE__*/React.createElement("button", { onClick: () => setCarViaCount((c) => c + 1), className: "text-sm font-bold text-emerald-800 flex items-center gap-1 ml-5 bg-emerald-100 px-3 py-1 rounded-full hover:bg-emerald-200" }, /*#__PURE__*/React.createElement(Icon, { name: "plus", size: 16 }), " 用務先を追加"), /*#__PURE__*/
+
+    React.createElement("div", { className: "pt-2 border-t mt-2" }, /*#__PURE__*/
+    React.createElement("label", { className: "flex items-center gap-2 mb-1.5 cursor-pointer w-fit" }, /*#__PURE__*/React.createElement("input", { type: "checkbox", checked: carSameStartEnd, onChange: (e) => setCarSameStartEnd(e.target.checked), className: "w-4 h-4 text-emerald-800 rounded focus:ring-emerald-800" }), " ", /*#__PURE__*/React.createElement("span", { className: "text-sm text-gray-700 font-bold" }, "出発地と同じ")), /*#__PURE__*/
+    React.createElement(SearchableSelect, { label: "到着地", options: carLocations, value: carRoute.end, onChange: (v) => setCarRoute((p) => ({ ...p, end: v })), placeholder: "市区町村...", disabled: carSameStartEnd, activeTab: activeTab })
+    ), /*#__PURE__*/
+
+    React.createElement("div", { className: "grid grid-cols-2 gap-3 pt-3 border-t" }, /*#__PURE__*/
+    React.createElement("div", null, /*#__PURE__*/
+    React.createElement("label", { className: "block text-sm font-bold text-gray-700 mb-1" }, "通勤距離(km)"), /*#__PURE__*/
+    React.createElement("input", { type: "number", step: "0.1", min: "0", className: "w-full p-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-emerald-800 text-center", value: carRoute.commuteDist, onChange: (e) => setCarRoute((p) => ({ ...p, commuteDist: e.target.value })) })
+    ), /*#__PURE__*/
+    React.createElement("div", null, /*#__PURE__*/
+    React.createElement("label", { className: "block text-sm font-bold text-gray-700 mb-1" }, "往復/片道"), /*#__PURE__*/
+    React.createElement("div", { className: "flex bg-gray-100 p-1 rounded-lg" }, /*#__PURE__*/
+    React.createElement("button", { className: `flex-1 rounded-md text-sm font-bold py-1 transition-colors ${!carRoute.isRoundTrip ? 'bg-white shadow text-emerald-800' : 'text-gray-500 hover:bg-gray-200'}`, onClick: () => setCarRoute((p) => ({ ...p, isRoundTrip: false })) }, "片道"), /*#__PURE__*/
+    React.createElement("button", { className: `flex-1 rounded-md text-sm font-bold py-1 transition-colors ${carRoute.isRoundTrip ? 'bg-white shadow text-emerald-800' : 'text-gray-500 hover:bg-gray-200'}`, onClick: () => setCarRoute((p) => ({ ...p, isRoundTrip: true })) }, "往復")
+    )
+    )
+    )
+    ), /*#__PURE__*/
+
+    React.createElement("div", { className: "bg-white p-3.5 rounded-xl shadow-sm" }, /*#__PURE__*/
+    React.createElement("div", { className: "mb-2" }, /*#__PURE__*/
+    React.createElement("h2", { className: "font-bold text-gray-700 text-sm" }, "計算結果")
+    ),
+    carResult.segments.length === 0 ? /*#__PURE__*/React.createElement("p", { className: "text-center text-sm text-gray-400 py-4" }, "経路を入力してください") : /*#__PURE__*/
+    React.createElement("div", { className: "text-sm space-y-2 font-medium" },
+    carResult.segments.map((s, i) => /*#__PURE__*/
+    React.createElement("div", { key: i, className: "flex justify-between border-b border-gray-100 pb-1.5" }, /*#__PURE__*/
+    React.createElement("span", { className: "text-gray-700" }, s.from, " ", /*#__PURE__*/React.createElement("span", { className: "text-gray-400 mx-1" }, "→"), " ", s.to), /*#__PURE__*/
+    React.createElement("span", { className: s.found ? "text-gray-800" : "text-red-600 font-bold bg-red-50 px-1 rounded" }, s.found ? s.dist.toFixed(1) + "km" : "不明")
+    )
+    ), /*#__PURE__*/
+    React.createElement("div", { className: "bg-gray-50 p-2.5 rounded-lg space-y-1 border border-gray-100 text-xs" }, /*#__PURE__*/
+    React.createElement("div", { className: "flex justify-between text-gray-600" }, /*#__PURE__*/React.createElement("span", null, "総距離"), /*#__PURE__*/React.createElement("span", null, carResult.totalDist.toFixed(1), " km")), /*#__PURE__*/
+    React.createElement("div", { className: "flex justify-between text-gray-600" }, /*#__PURE__*/React.createElement("span", null, "基本加算"), /*#__PURE__*/React.createElement("span", { className: "text-emerald-800" }, "+15.0 km")), /*#__PURE__*/
+    React.createElement("div", { className: "flex justify-between text-gray-600" }, /*#__PURE__*/React.createElement("span", null, "通勤控除"), /*#__PURE__*/React.createElement("span", { className: "text-red-500" }, "-", carResult.deduction.toFixed(1), " km")), /*#__PURE__*/
+    React.createElement("div", { className: "flex justify-between font-bold text-gray-800 border-t border-gray-200 pt-1.5 mt-1.5 text-sm" }, /*#__PURE__*/
+    React.createElement("span", null, "支給対象距離 ", /*#__PURE__*/React.createElement("span", { className: "text-[10px] font-normal text-gray-500" }, "(切捨)")), /*#__PURE__*/
+    React.createElement("span", null, carResult.payableDist, " km")
+    ), /*#__PURE__*/
+    React.createElement("div", { className: "flex justify-between text-[10px] text-gray-500 pt-0.5" }, /*#__PURE__*/
+    React.createElement("span", null, "単価設定: ", settings.unitPrice, "円/km")
+    )
+    )
+    )
+
+    )
+    )
+
+    ), /*#__PURE__*/
+
+    React.createElement("footer", { className: `fixed bottom-0 left-0 right-0 mx-auto max-w-md border-t border-gray-200 px-3 py-2 shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.1)] z-20 transition-colors duration-300 ${activeTab === 'train' ? 'bg-blue-100' : 'bg-emerald-100'}` }, /*#__PURE__*/
+    React.createElement("div", { className: "space-y-1" }, /*#__PURE__*/
+    React.createElement("div", { className: "flex justify-between items-center" }, /*#__PURE__*/
+    React.createElement("span", { className: "text-xs font-bold text-gray-700" }, activeTab === 'train' ? '鉄道賃' : '車賃'), /*#__PURE__*/
+    React.createElement("span", { className: "text-sm font-bold text-gray-800" }, baseCost.toLocaleString(), /*#__PURE__*/React.createElement("span", { className: "text-[10px] font-normal text-gray-600 ml-1" }, "円"))
+    ), /*#__PURE__*/
+
+    React.createElement("div", { className: "flex justify-between items-center" }, /*#__PURE__*/
+    React.createElement("span", { className: "text-xs font-bold text-gray-700 flex items-center gap-1" }, /*#__PURE__*/React.createElement(Icon, { name: "plus", size: 12 }), " 旅行雑費"), /*#__PURE__*/
+    React.createElement("div", { className: "flex items-center gap-1" }, /*#__PURE__*/
+    React.createElement("input", {
+      type: "number",
+      min: "0",
+      placeholder: "0",
+      className: `bg-white w-20 px-2 py-0.5 border border-gray-300 rounded text-right text-sm outline-none focus:ring-2 ${activeTab === 'train' ? 'focus:ring-blue-800' : 'focus:ring-emerald-800'}`,
+      value: travelMisc,
+      onChange: (e) => setTravelMisc(e.target.value) }
+    ), /*#__PURE__*/
+    React.createElement("span", { className: "text-xs text-gray-600" }, "円")
+    )
+    ), /*#__PURE__*/
+
+    React.createElement("div", { className: "flex justify-between items-center border-b border-dashed border-gray-300 pb-1.5" }, /*#__PURE__*/
+    React.createElement("span", { className: "text-xs font-bold text-gray-700 flex items-center gap-1" }, /*#__PURE__*/React.createElement(Icon, { name: "plus", size: 12 }), " その他"), /*#__PURE__*/
+    React.createElement("div", { className: "flex items-center gap-1" }, /*#__PURE__*/
+    React.createElement("input", {
+      type: "number",
+      min: "0",
+      placeholder: "0",
+      className: `bg-white w-20 px-2 py-0.5 border border-gray-300 rounded text-right text-sm outline-none focus:ring-2 ${activeTab === 'train' ? 'focus:ring-blue-800' : 'focus:ring-emerald-800'}`,
+      value: otherExpense,
+      onChange: (e) => setOtherExpense(e.target.value) }
+    ), /*#__PURE__*/
+    React.createElement("span", { className: "text-xs text-gray-600" }, "円")
+    )
+    ), /*#__PURE__*/
+
+    React.createElement("div", { className: "flex justify-between items-end pt-0.5" }, /*#__PURE__*/
+    React.createElement("span", { className: "text-xs font-black text-gray-800" }, "＝ 支給額"), /*#__PURE__*/
+    React.createElement("div", { className: `text-xl font-black tracking-tight ${activeTab === 'train' ? 'text-blue-800' : 'text-emerald-800'}` },
+    grandTotal.toLocaleString(), /*#__PURE__*/
+    React.createElement("span", { className: "text-xs font-medium text-gray-600 ml-1 tracking-normal" }, "円")
+    )
+    )
+    )
+    ),
+
+    isSettingsOpen && /*#__PURE__*/
+    React.createElement("div", { className: "fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" }, /*#__PURE__*/
+    React.createElement("div", { className: "bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-200" }, /*#__PURE__*/
+    React.createElement("div", { className: "bg-gray-50 px-4 py-3 border-b flex justify-between items-center" }, /*#__PURE__*/
+    React.createElement("h2", { className: "font-bold text-gray-800 flex items-center gap-2" }, /*#__PURE__*/React.createElement(Icon, { name: "settings", size: 18 }), " 初期設定"), /*#__PURE__*/
+    React.createElement("button", { onClick: () => setIsSettingsOpen(false), className: "text-gray-400 hover:text-gray-600" }, /*#__PURE__*/React.createElement(Icon, { name: "x", size: 20 }))
+    ), /*#__PURE__*/
+    React.createElement("div", { className: "p-4 space-y-3 max-h-[70vh] overflow-y-auto" }, /*#__PURE__*/
+    React.createElement("div", null, /*#__PURE__*/
+    React.createElement("label", { className: "block text-xs font-bold text-gray-700 mb-1" }, "自動車単価 (円/km)"), /*#__PURE__*/
+    React.createElement("input", {
+      type: "number",
+      className: `w-full p-2 border border-gray-300 rounded-lg outline-none focus:ring-2 ${activeTab === 'train' ? 'focus:ring-blue-800' : 'focus:ring-emerald-800'}`,
+      value: settings.unitPrice,
+      onChange: (e) => setSettings((p) => ({ ...p, unitPrice: Number(e.target.value) })) }
+    )
+    ), /*#__PURE__*/
+    React.createElement("div", null, /*#__PURE__*/
+    React.createElement("label", { className: "block text-xs font-bold text-gray-700 mb-1" }, "旅行雑費 初期値 (円)"), /*#__PURE__*/
+    React.createElement("input", {
+      type: "number",
+      className: `w-full p-2 border border-gray-300 rounded-lg outline-none focus:ring-2 ${activeTab === 'train' ? 'focus:ring-blue-800' : 'focus:ring-emerald-800'}`,
+      value: settings.defaultMisc,
+      onChange: (e) => setSettings((p) => ({ ...p, defaultMisc: Number(e.target.value) })) }
+    )
+    ), /*#__PURE__*/
+    React.createElement("div", { className: "relative z-40" }, /*#__PURE__*/
+    React.createElement(SearchableSelect, {
+      label: "所属所の最寄駅 (鉄道の出発地初期値)",
+      options: trainStations,
+      value: settings.baseStation,
+      onChange: (v) => setSettings((p) => ({ ...p, baseStation: v })),
+      placeholder: "駅名...",
+      activeTab: activeTab }
+    )
+    ), /*#__PURE__*/
+    React.createElement("div", { className: "relative z-30" }, /*#__PURE__*/
+    React.createElement(SearchableSelect, {
+      label: "所属所の市区町村 (自動車の出発地初期値)",
+      options: carLocations,
+      value: settings.baseCity,
+      onChange: (v) => setSettings((p) => ({ ...p, baseCity: v })),
+      placeholder: "市区町村...",
+      activeTab: activeTab }
+    )
+    )
+    ), /*#__PURE__*/
+    React.createElement("div", { className: "p-3 border-t bg-gray-50 flex justify-end gap-2" }, /*#__PURE__*/
+    React.createElement("button", { onClick: () => setIsSettingsOpen(false), className: "px-3 py-1.5 text-sm font-bold text-gray-600 hover:bg-gray-200 rounded-lg transition-colors" }, "キャンセル"), /*#__PURE__*/
+    React.createElement("button", { onClick: () => handleSaveSettings(settings), className: `px-4 py-1.5 text-sm font-bold text-white rounded-lg shadow transition-colors ${activeTab === 'train' ? 'bg-blue-800 hover:bg-blue-900' : 'bg-emerald-800 hover:bg-emerald-900'}` }, "保存する")
+    )
+    )
+    )
+
+
+    ));
+
+};
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(/*#__PURE__*/React.createElement(App, null));
     </script>
 </body>
 </html>
